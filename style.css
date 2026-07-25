@@ -1,0 +1,96 @@
+body {
+    margin: 0;
+    overflow: hidden;
+    background: black;
+    font-family: Arial, sans-serif;
+    user-select: none;
+}
+
+canvas {
+    display: block;
+}
+
+/* UIオーバーレイ（全画面メニュー） */
+.overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.85);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 100; /* 最前面に配置 */
+}
+
+/* 非表示設定（確実にクリックを邪魔しないように設定） */
+.hidden {
+    display: none !important;
+    pointer-events: none !important;
+}
+
+h1 {
+    color: #ff3333;
+    font-size: 48px;
+    margin-bottom: 30px;
+    text-shadow: 0 0 10px #ff0000;
+}
+
+h2 {
+    color: #ffffff;
+    font-size: 36px;
+    margin-bottom: 20px;
+}
+
+h2.danger {
+    color: #ff2222;
+    text-shadow: 0 0 10px #ff0000;
+}
+
+h2.success {
+    color: #33ff33;
+    text-shadow: 0 0 10px #00ff00;
+}
+
+/* ボタン設定 */
+.btn {
+    width: 220px;
+    padding: 12px 24px;
+    margin: 10px;
+    font-size: 18px;
+    font-weight: bold;
+    color: #ffffff;
+    background: #333333;
+    border: 2px solid #666666;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    z-index: 101; /* ボタン自体を一番手前に押し出す */
+    position: relative;
+}
+
+.btn:hover {
+    background: #555555;
+    border-color: #ffffff;
+    transform: scale(1.05);
+}
+
+/* ゲーム内メッセージ（クリックを透過させる設定） */
+#game-message {
+    position: absolute;
+    top: 20%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: #ffff00;
+    font-size: 24px;
+    font-weight: bold;
+    background: rgba(0, 0, 0, 0.7);
+    padding: 10px 20px;
+    border-radius: 8px;
+    border: 1px solid #ffff00;
+    z-index: 50;
+    pointer-events: none; /* マウスクリックを無視して下の要素に通す */
+    text-shadow: 0 0 8px #ffff00;
+}

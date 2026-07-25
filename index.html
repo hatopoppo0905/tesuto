@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DEATH MAZE 3D</title>
+    <link rel="stylesheet" href="style.css">
+    <script async src="https://unpkg.com/es-module-shims@1.10.0/dist/es-module-shims.js"></script>
+    <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.161.0/build/three.module.js"
+      }
+    }
+    </script>
+</head>
+<body>
+
+    <div id="game-message" class="hidden"></div>
+
+    <div id="main-menu" class="overlay">
+        <h1>DEATH MAZE 3D</h1>
+        <button id="start-btn" class="btn">START GAME</button>
+    </div>
+
+    <div id="pause-menu" class="overlay hidden">
+        <h2>PAUSED</h2>
+        <button id="resume-btn" class="btn">ゲームに戻る</button>
+        <button id="restart-btn" class="btn">やり直す</button>
+        <button id="menu-btn" class="btn">メインメニューへ</button>
+    </div>
+
+    <div id="game-over-screen" class="overlay hidden">
+        <h2 class="danger">GAME OVER</h2>
+        <button id="retry-btn" class="btn">TRY AGAIN</button>
+        <button id="gameover-menu-btn" class="btn">MAIN MENU</button>
+    </div>
+
+    <div id="clear-screen" class="overlay hidden">
+        <h2 class="success">STAGE CLEAR!</h2>
+        <button id="clear-retry-btn" class="btn">PLAY AGAIN</button>
+        <button id="clear-menu-btn" class="btn">MAIN MENU</button>
+    </div>
+
+    <script type="module" src="./script.js"></script>
+</body>
+</html>
