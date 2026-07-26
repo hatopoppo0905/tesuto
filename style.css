@@ -1,96 +1,171 @@
-body {
-    margin: 0;
-    overflow: hidden;
-    background: black;
-    font-family: Arial, sans-serif;
-    user-select: none;
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
+body, html {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background-color: #111;
+  font-family: sans-serif;
+}
+
+/* Three.jsのキャンバスを背景いっぱいに配置 */
 canvas {
-    display: block;
+  display: block;
+  width: 100vw;
+  height: 100vh;
 }
 
-/* UIオーバーレイ（全画面メニュー） */
-.overlay {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100vh;
-    background: rgba(0, 0, 0, 0.85);
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    z-index: 100; /* 最前面に配置 */
-}
-
-/* 非表示設定（確実にクリックを邪魔しないように設定） */
 .hidden {
-    display: none !important;
-    pointer-events: none !important;
+  display: none !important;
 }
 
-h1 {
-    color: #ff3333;
-    font-size: 48px;
-    margin-bottom: 30px;
-    text-shadow: 0 0 10px #ff0000;
+/* メニュー画面共通スタイル */
+.overlay-screen {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  z-index: 100;
+  color: #fff;
 }
 
-h2 {
-    color: #ffffff;
-    font-size: 36px;
-    margin-bottom: 20px;
+.overlay-screen h1 {
+  font-size: 36px;
+  margin-bottom: 25px;
+  text-shadow: 0 0 10px rgba(255,255,255,0.5);
 }
 
-h2.danger {
-    color: #ff2222;
-    text-shadow: 0 0 10px #ff0000;
+.overlay-screen h2 {
+  font-size: 40px;
+  margin-bottom: 20px;
 }
 
-h2.success {
-    color: #33ff33;
-    text-shadow: 0 0 10px #00ff00;
+.mode-select {
+  display: flex;
+  gap: 15px;
+  margin-bottom: 25px;
 }
 
-/* ボタン設定 */
-.btn {
-    width: 220px;
-    padding: 12px 24px;
-    margin: 10px;
-    font-size: 18px;
-    font-weight: bold;
-    color: #ffffff;
-    background: #333333;
-    border: 2px solid #666666;
-    border-radius: 6px;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    z-index: 101; /* ボタン自体を一番手前に押し出す */
-    position: relative;
+.mode-select button {
+  padding: 10px 20px;
+  font-size: 16px;
+  font-weight: bold;
+  border: 2px solid #fff;
+  border-radius: 8px;
+  background: #333;
+  color: #fff;
+  cursor: pointer;
+  transition: 0.2s;
 }
 
-.btn:hover {
-    background: #555555;
-    border-color: #ffffff;
-    transform: scale(1.05);
+.mode-select button.active-mode {
+  background: #00ff88;
+  color: #000;
+  border-color: #00ff88;
 }
 
-/* ゲーム内メッセージ（クリックを透過させる設定） */
+.main-btn {
+  padding: 12px 30px;
+  font-size: 18px;
+  font-weight: bold;
+  background: #ffffff;
+  color: #000;
+  border: none;
+  border-radius: 8px;
+  margin: 8px;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.main-btn:hover {
+  background: #00ff88;
+  transform: scale(1.05);
+}
+
+/* メッセージ表示 */
 #game-message {
-    position: absolute;
-    top: 20%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    color: #ffff00;
-    font-size: 24px;
-    font-weight: bold;
-    background: rgba(0, 0, 0, 0.7);
-    padding: 10px 20px;
-    border-radius: 8px;
-    border: 1px solid #ffff00;
-    z-index: 50;
-    pointer-events: none; /* マウスクリックを無視して下の要素に通す */
-    text-shadow: 0 0 8px #ffff00;
+  position: absolute;
+  top: 15%;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 10px 20px;
+  background: rgba(0, 0, 0, 0.7);
+  color: #fff;
+  border: 1px solid #fff;
+  border-radius: 8px;
+  font-size: 18px;
+  font-weight: bold;
+  z-index: 50;
+  pointer-events: none;
+}
+
+/* スマホUI */
+#touch-ui {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 20;
+}
+
+#touch-dash-btn {
+  position: absolute;
+  top: 70px;
+  right: 15px;
+  padding: 12px 20px;
+  font-size: 16px;
+  font-weight: bold;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  border: 2px solid #fff;
+  border-radius: 20px;
+  pointer-events: auto;
+}
+
+#touch-dash-btn.active {
+  background: #00ff88;
+  color: #000;
+}
+
+#joystick-container {
+  position: absolute;
+  bottom: 30px;
+  left: 30px;
+  width: 120px;
+  height: 120px;
+  background: rgba(255, 255, 255, 0.2);
+  border: 2px solid rgba(255, 255, 255, 0.5);
+  border-radius: 50%;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+#joystick-knob {
+  position: absolute;
+  top: 35px;
+  left: 35px;
+  width: 50px;
+  height: 50px;
+  background: rgba(255, 255, 255, 0.8);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.action-touch-btn {
+  pointer-events: auto !important;
+  cursor: pointer;
 }

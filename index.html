@@ -1,47 +1,56 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DEATH MAZE 3D</title>
-    <link rel="stylesheet" href="style.css">
-    <script async src="https://unpkg.com/es-module-shims@1.10.0/dist/es-module-shims.js"></script>
-    <script type="importmap">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>迷路脱出ゲーム</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <div id="main-menu" class="overlay-screen">
+    <h1>迷路脱出ゲーム</h1>
+    <div class="mode-select">
+      <button id="mode-pc-btn" class="active-mode">💻 PCモード</button>
+      <button id="mode-touch-btn">📱 スマホモード</button>
+    </div>
+    <button id="start-btn" class="main-btn">ゲーム開始</button>
+  </div>
+
+  <div id="pause-menu" class="overlay-screen hidden">
+    <h2>一時停止</h2>
+    <button id="resume-btn" class="main-btn">再開</button>
+    <button id="menu-btn" class="main-btn">メニューに戻る</button>
+  </div>
+
+  <div id="game-over-screen" class="overlay-screen hidden">
+    <h2 style="color: #ff3333;">GAME OVER</h2>
+    <button id="retry-btn" class="main-btn">リトライ</button>
+    <button id="gameover-menu-btn" class="main-btn">メニューに戻る</button>
+  </div>
+
+  <div id="clear-screen" class="overlay-screen hidden">
+    <h2 style="color: #00ff88;">STAGE CLEAR!</h2>
+    <button id="clear-retry-btn" class="main-btn">もう一度遊ぶ</button>
+    <button id="clear-menu-btn" class="main-btn">メニューに戻る</button>
+  </div>
+
+  <div id="game-message" class="hidden"></div>
+
+  <div id="touch-ui" class="hidden">
+    <div id="joystick-container">
+      <div id="joystick-knob"></div>
+    </div>
+    <button id="touch-dash-btn">🏃 ダッシュ</button>
+  </div>
+
+  <script type="importmap">
     {
       "imports": {
         "three": "https://unpkg.com/three@0.161.0/build/three.module.js"
       }
     }
-    </script>
-</head>
-<body>
-
-    <div id="game-message" class="hidden"></div>
-
-    <div id="main-menu" class="overlay">
-        <h1>DEATH MAZE 3D</h1>
-        <button id="start-btn" class="btn">START GAME</button>
-    </div>
-
-    <div id="pause-menu" class="overlay hidden">
-        <h2>PAUSED</h2>
-        <button id="resume-btn" class="btn">ゲームに戻る</button>
-        <button id="restart-btn" class="btn">やり直す</button>
-        <button id="menu-btn" class="btn">メインメニューへ</button>
-    </div>
-
-    <div id="game-over-screen" class="overlay hidden">
-        <h2 class="danger">GAME OVER</h2>
-        <button id="retry-btn" class="btn">TRY AGAIN</button>
-        <button id="gameover-menu-btn" class="btn">MAIN MENU</button>
-    </div>
-
-    <div id="clear-screen" class="overlay hidden">
-        <h2 class="success">STAGE CLEAR!</h2>
-        <button id="clear-retry-btn" class="btn">PLAY AGAIN</button>
-        <button id="clear-menu-btn" class="btn">MAIN MENU</button>
-    </div>
-
-    <script type="module" src="./script.js"></script>
+  </script>
+  <script type="module" src="script.js"></script>
 </body>
 </html>
