@@ -15,6 +15,7 @@ const ENEMY_COUNT = 3;
 const LOCKER_COUNT = 5;          
 const ITEM_COUNT = 2; // 消滅アイテム(★)の出現数
 const DECOY_ITEM_COUNT = 2; // デコイアイテム(🔔)の出現数
+const PUZZLE_COUNT = 3; // 謎解き端末の数
 
 const PLAYER_RADIUS = 0.6;       
 
@@ -35,13 +36,37 @@ let enemyVanishTimer = 0;
 let decoyStock = 0;
 let activeDecoy = null;
 
+// 謎解き管理
+let puzzles = [];
+let solvedPuzzleCount = 0;
+let currentPuzzleTarget = null; // 現在アクセス中の端末
+
+// 出題する謎のリスト（自由に追加・変更できます）
+// 出題する謎のリスト（修正版）
+const PUZZLE_QUESTIONS = [
+    {
+        question: "【謎解き 1】\n「赤」「青」「黄」の3つのボタンがある。\n壁の張り紙には『青の隣は赤ではない。赤色は一番右。』と書かれている。\n一番左の色は？",
+        options: ["赤", "青", "黄"],
+        answer: 1 // 青（左から：青、黄、赤）
+    },
+    {
+        question: "【謎解き 2】\n『1, 2, 4, 7, 11, ?』\n? に入る数字はどれ？",
+        options: ["15", "16", "18"],
+        answer: 1 // 16 (+1, +2, +3, +4, +5)
+    },
+    {
+        question: "【謎解き 3】\n『暗号：3 1 2 4』\nあ＝1, い＝2, う＝3, え＝4 とするとき、解ける言葉は？",
+        options: ["あいうえ", "うあいえ", "えいあう"],
+        answer: 1 // うあいえ
+    }
+];
 // 操作モード（"PC" または "TOUCH"）
 let inputMode = "PC";
 
 // ====================
 // ゲーム状態管理
 // ====================
-const STATES = { MENU: "MENU", PLAYING: "PLAYING", PAUSED: "PAUSED", GAMEOVER: "GAMEOVER", CLEAR: "CLEAR" };
+const STATES = { MENU: "MENU", PLAYING: "PLAYING", PAUSED: "PAUSED", GAMEOVER: "GAMEOVER", CLEAR: "CLEAR", PUZZLE: "PUZZLE" };
 let gameState = STATES.MENU;
 
 const mainMenu = document.getElementById("main-menu");
@@ -65,7 +90,7 @@ function showMessage(text, duration = 2000) {
 }
 
 // ====================
-// UI作成（インタラクト/デコイ/スタミナ）
+// UI作成（インタラクト/デコイ/スタミナ/謎解きダイアログ）
 // ====================
 // 1. ロッカー等のインタラクトボタン
 const interactBtn = document.createElement("button");
@@ -141,6 +166,108 @@ staminaBar.style.backgroundColor = "#00ff88";
 staminaBar.style.transition = "width 0.05s linear";
 staminaContainer.appendChild(staminaBar);
 document.body.appendChild(staminaContainer);
+
+// 4. 謎解きモーダル画面（自動生成）
+const puzzleModal = document.createElement("div");
+puzzleModal.style.position = "absolute";
+puzzleModal.style.top = "50%";
+puzzleModal.style.left = "50%";
+puzzleModal.style.transform = "translate(-50%, -50%)";
+puzzleModal.style.width = "85%";
+puzzleModal.style.maxWidth = "400px";
+puzzleModal.style.padding = "20px";
+puzzleModal.style.backgroundColor = "rgba(10, 15, 30, 0.95)";
+puzzleModal.style.border = "2px solid #00d2ff";
+puzzleModal.style.borderRadius = "16px";
+puzzleModal.style.color = "#ffffff";
+puzzleModal.style.textAlign = "center";
+puzzleModal.style.zIndex = "100";
+puzzleModal.style.boxShadow = "0 0 20px rgba(0,210,255,0.5)";
+puzzleModal.classList.add("hidden");
+
+const puzzleQuestionText = document.createElement("p");
+puzzleQuestionText.style.fontSize = "16px";
+puzzleQuestionText.style.lineHeight = "1.6";
+puzzleQuestionText.style.whiteSpace = "pre-wrap";
+puzzleQuestionText.style.marginBottom = "20px";
+puzzleModal.appendChild(puzzleQuestionText);
+
+const puzzleOptionsContainer = document.createElement("div");
+puzzleOptionsContainer.style.display = "flex";
+puzzleOptionsContainer.style.flexDirection = "column";
+puzzleOptionsContainer.style.gap = "10px";
+puzzleModal.appendChild(puzzleOptionsContainer);
+
+const puzzleCloseBtn = document.createElement("button");
+puzzleCloseBtn.innerText = "閉じる";
+puzzleCloseBtn.style.marginTop = "15px";
+puzzleCloseBtn.style.padding = "8px 16px";
+puzzleCloseBtn.style.backgroundColor = "#444";
+puzzleCloseBtn.style.color = "#fff";
+puzzleCloseBtn.style.border = "none";
+puzzleCloseBtn.style.borderRadius = "8px";
+puzzleCloseBtn.style.cursor = "pointer";
+puzzleCloseBtn.addEventListener("click", closePuzzleModal);
+puzzleModal.appendChild(puzzleCloseBtn);
+
+document.body.appendChild(puzzleModal);
+
+function openPuzzleModal(puzzleTarget) {
+    currentPuzzleTarget = puzzleTarget;
+    const qData = PUZZLE_QUESTIONS[puzzleTarget.id % PUZZLE_QUESTIONS.length];
+
+    puzzleQuestionText.innerText = qData.question;
+    puzzleOptionsContainer.innerHTML = "";
+
+    qData.options.forEach((optText, index) => {
+        const btn = document.createElement("button");
+        btn.innerText = optText;
+        btn.style.padding = "12px";
+        btn.style.fontSize = "16px";
+        btn.style.fontWeight = "bold";
+        btn.style.backgroundColor = "#005588";
+        btn.style.color = "#ffffff";
+        btn.style.border = "1px solid #00d2ff";
+        btn.style.borderRadius = "8px";
+        btn.style.cursor = "pointer";
+
+        btn.addEventListener("click", () => checkPuzzleAnswer(index, qData.answer));
+        puzzleOptionsContainer.appendChild(btn);
+    });
+
+    puzzleModal.classList.remove("hidden");
+    gameState = STATES.PUZZLE;
+    if (document.pointerLockElement) document.exitPointerLock();
+}
+
+function closePuzzleModal() {
+    puzzleModal.classList.add("hidden");
+    currentPuzzleTarget = null;
+    gameState = STATES.PLAYING;
+    if (inputMode === "PC") renderer.domElement.requestPointerLock();
+}
+
+function checkPuzzleAnswer(selectedIndex, correctIndex) {
+    if (selectedIndex === correctIndex) {
+        if (currentPuzzleTarget) {
+            currentPuzzleTarget.solved = true;
+            currentPuzzleTarget.mesh.material.color.setHex(0x00ff88); // 緑色に変わる
+            currentPuzzleTarget.mesh.material.emissive.setHex(0x00ff88);
+            solvedPuzzleCount++;
+
+            closePuzzleModal();
+
+            if (solvedPuzzleCount >= PUZZLE_COUNT) {
+                hasKey = true;
+                showMessage("【謎解き完了】すべての謎を解き、鍵を手に入れた！脱出扉へ向かえ！", 3500);
+            } else {
+                showMessage(`謎を解いた！ (残り ${PUZZLE_COUNT - solvedPuzzleCount} つ)`, 2000);
+            }
+        }
+    } else {
+        showMessage("不正解… もう一度考えよう！", 1500);
+    }
+}
 
 // ====================
 // シーン・カメラ・レンダラー
@@ -218,21 +345,27 @@ let decoyPickups = [];
 
 let startPos = new THREE.Vector3();
 let goalPos = new THREE.Vector3();
-let keyPos = new THREE.Vector3();
 
-const keyGroup = new THREE.Group();
-const keyMesh = new THREE.Mesh(
-    new THREE.TorusGeometry(0.3, 0.08, 8, 16),
-    new THREE.MeshLambertMaterial({ color: 0xffd700 })
-);
-keyGroup.add(keyMesh);
-scene.add(keyGroup);
+// 脱出扉オブジェクト
+const doorGeo = new THREE.BoxGeometry(TILE * 0.85, WALL_HEIGHT * 0.9, 0.2);
+const doorMat = new THREE.MeshLambertMaterial({ 
+    color: 0x8B4513, 
+    emissive: 0x00ff88, 
+    emissiveIntensity: 0.15,
+    transparent: true,
+    opacity: 0.95
+});
+const goalDoor = new THREE.Group();
+const doorMain = new THREE.Mesh(doorGeo, doorMat);
+goalDoor.add(doorMain);
 
-const goalMesh = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.8, 0.8, WALL_HEIGHT, 8),
-    new THREE.MeshBasicMaterial({ color: 0x00ff88, transparent: true, opacity: 0.5 })
-);
-scene.add(goalMesh);
+const handleGeo = new THREE.SphereGeometry(0.12, 8, 8);
+const handleMat = new THREE.MeshLambertMaterial({ color: 0xffd700 });
+const handle = new THREE.Mesh(handleGeo, handleMat);
+handle.position.set(TILE * 0.3, 0, 0.15);
+goalDoor.add(handle);
+
+scene.add(goalDoor);
 
 function generateMazeData(w, h) {
     const grid = Array.from({ length: h }, () => Array(w).fill("#"));
@@ -262,14 +395,15 @@ function generateMazeData(w, h) {
 function buildMaze() {
     wallMeshes.forEach(mesh => scene.remove(mesh));
     lockers.forEach(l => scene.remove(l.mesh));
+    puzzles.forEach(p => scene.remove(p.mesh));
     lightMeshes.forEach(mesh => scene.remove(mesh));
     vanishItems.forEach(item => scene.remove(item.mesh));
     decoyPickups.forEach(item => scene.remove(item.mesh));
     if (activeDecoy) { scene.remove(activeDecoy.mesh); activeDecoy = null; }
 
-    wallMeshes = []; walls = []; openTiles = []; lockers = []; lightMeshes = [];
+    wallMeshes = []; walls = []; openTiles = []; lockers = []; lightMeshes = []; puzzles = [];
     vanishItems = []; decoyPickups = [];
-    enemyVanishTimer = 0; decoyStock = 0;
+    enemyVanishTimer = 0; decoyStock = 0; solvedPuzzleCount = 0; hasKey = false;
     updateDecoyUI();
 
     maze = generateMazeData(MAZE_WIDTH, MAZE_HEIGHT);
@@ -284,11 +418,52 @@ function buildMaze() {
 
     const shuffled = [...openTiles].sort(() => Math.random() - 0.5);
     startPos.copy(shuffled[0].pos);
-    goalPos.copy(shuffled[1].pos);
-    keyPos.copy(shuffled[2].pos);
 
-    keyGroup.position.set(keyPos.x, 1.2, keyPos.z);
-    goalMesh.position.set(goalPos.x, WALL_HEIGHT / 2, goalPos.z);
+    // 謎解き端末（青い端末）の配置
+    const puzzleGeo = new THREE.BoxGeometry(0.6, 1.2, 0.6);
+    for (let i = 0; i < PUZZLE_COUNT; i++) {
+        const tile = shuffled[i + 1] || openTiles[i + 1];
+        const puzzleMat = new THREE.MeshLambertMaterial({ 
+            color: 0x00d2ff, 
+            emissive: 0x0088cc, 
+            emissiveIntensity: 0.5 
+        });
+        const pMesh = new THREE.Mesh(puzzleGeo, puzzleMat);
+        pMesh.position.set(tile.pos.x, 0.6, tile.pos.z);
+        scene.add(pMesh);
+
+        puzzles.push({
+            id: i,
+            mesh: pMesh,
+            pos: tile.pos.clone(),
+            solved: false
+        });
+    }
+
+    // --- 外壁に脱出用の扉を配置 ---
+    const edgeTiles = openTiles.filter(tile => {
+        return tile.x === 1 || tile.x === MAZE_WIDTH - 2 || tile.z === 1 || tile.z === MAZE_HEIGHT - 2;
+    });
+
+    if (edgeTiles.length > 0) {
+        const doorTile = edgeTiles[Math.floor(Math.random() * edgeTiles.length)];
+        goalDoor.position.set(doorTile.pos.x, WALL_HEIGHT / 2, doorTile.pos.z);
+
+        if (doorTile.x === 1) { 
+            goalDoor.rotation.y = Math.PI / 2;
+            goalDoor.position.x -= TILE * 0.42;
+        } else if (doorTile.x === MAZE_WIDTH - 2) { 
+            goalDoor.rotation.y = -Math.PI / 2;
+            goalDoor.position.x += TILE * 0.42;
+        } else if (doorTile.z === 1) { 
+            goalDoor.rotation.y = 0;
+            goalDoor.position.z -= TILE * 0.42;
+        } else if (doorTile.z === MAZE_HEIGHT - 2) { 
+            goalDoor.rotation.y = Math.PI;
+            goalDoor.position.z += TILE * 0.42;
+        }
+        goalPos.copy(goalDoor.position);
+    }
 
     const wallGeo = new THREE.BoxGeometry(TILE, WALL_HEIGHT, TILE);
     const wallMat = new THREE.MeshLambertMaterial({ color: 0x888899 });
@@ -446,14 +621,23 @@ function triggerInteractAction() {
         if (currentLocker) camera.position.set(currentLocker.standPos.x, 1.5, currentLocker.standPos.z);
         currentLocker = null;
         showMessage("ロッカーから出た");
-    } else {
-        for (const locker of lockers) {
-            if (camera.position.distanceTo(locker.pos) < 2.2) {
-                isHiding = true; currentLocker = locker;
-                camera.position.set(locker.pos.x, 1.5, locker.pos.z);
-                showMessage("ロッカーに隠れた");
-                break;
-            }
+        return;
+    }
+
+    // 謎解き端末へのアクセス
+    const nearPuzzle = puzzles.find(p => !p.solved && camera.position.distanceTo(p.pos) < 2.0);
+    if (nearPuzzle) {
+        openPuzzleModal(nearPuzzle);
+        return;
+    }
+
+    // ロッカーに入る
+    for (const locker of lockers) {
+        if (camera.position.distanceTo(locker.pos) < 2.2) {
+            isHiding = true; currentLocker = locker;
+            camera.position.set(locker.pos.x, 1.5, locker.pos.z);
+            showMessage("ロッカーに隠れた");
+            break;
         }
     }
 }
@@ -665,7 +849,7 @@ function assignNewRandomPath(enemy) {
 function initEnemies() {
     const shuffled = [...openTiles].sort(() => Math.random() - 0.5);
     enemies.forEach((e, idx) => {
-        const spawnTile = shuffled[idx + 3] || openTiles[0];
+        const spawnTile = shuffled[idx + 5] || openTiles[0];
         e.mesh.position.copy(spawnTile.pos); e.mesh.position.y = 1.4; e.mesh.visible = true;
         assignNewRandomPath(e);
     });
@@ -696,7 +880,6 @@ function resetGame() {
     camera.position.copy(startPos); camera.position.y = 1.5;
     player.velocityY = 0; player.onGround = true; yaw = 0; pitch = 0;
     camera.rotation.set(0, 0, 0);
-    hasKey = false; keyGroup.visible = true;
     initEnemies();
 }
 
@@ -734,7 +917,7 @@ function showMainMenu() {
     if (document.pointerLockElement) document.exitPointerLock();
     if (mainMenu) mainMenu.classList.remove("hidden");
     if (pauseMenu) pauseMenu.classList.add("hidden");
-    if (gameOverScreen) gameOverScreen.classList.add("hidden");
+    if (gameOverScreen) gameOverScreen.classList.remove("hidden");
     if (clearScreen) clearScreen.classList.add("hidden");
     if (touchUI) touchUI.classList.add("hidden");
 }
@@ -825,17 +1008,14 @@ function updateEnemies(delta) {
             }
         } 
         else if (canSeePlayer(e.mesh)) {
-            // 視界に入っている時は直接プレイヤーを直線追尾（ぐるぐる回転を防止）
             speed = ENEMY_SPEED;
             targetX = camera.position.x;
             targetZ = camera.position.z;
-            e.path = []; // パスをクリアして直接移動モードにする
+            e.path = [];
         } else {
-            // 見えない時は巡回・経路探索
             if (!e.path || e.pathIndex >= e.path.length) assignNewRandomPath(e);
         }
 
-        // 移動処理
         if (targetX !== null && targetZ !== null) {
             const dirX = targetX - e.mesh.position.x;
             const dirZ = targetZ - e.mesh.position.z;
@@ -883,8 +1063,17 @@ function updatePlayer(delta) {
         return;
     }
 
+    // 周囲のアクション判定（謎解き/ロッカー）
+    const nearPuzzle = puzzles.find(p => !p.solved && camera.position.distanceTo(p.pos) < 2.0);
     let nearLocker = lockers.find(l => camera.position.distanceTo(l.pos) < 2.2);
-    setInteractText(nearLocker ? "ロッカーに隠れる" : null);
+
+    if (nearPuzzle) {
+        setInteractText("🧩 謎を解く");
+    } else if (nearLocker) {
+        setInteractText("ロッカーに隠れる");
+    } else {
+        setInteractText(null);
+    }
 
     const isMovingPC = keys["w"] || keys["s"] || keys["a"] || keys["d"];
     const isMovingTouch = Math.hypot(touchMoveDir.x, touchMoveDir.z) > 0.1;
@@ -943,12 +1132,13 @@ function updatePlayer(delta) {
         }
     }
 
-    if (!hasKey && Math.hypot(camera.position.x - keyPos.x, camera.position.z - keyPos.z) < 1.2) {
-        hasKey = true; keyGroup.visible = false; showMessage("鍵を手に入れた！ゴールに向かえ！");
-    }
-
-    if (Math.hypot(camera.position.x - goalPos.x, camera.position.z - goalPos.z) < 1.5) {
-        if (hasKey) triggerClear(); else showMessage("鍵がないと脱出できない！");
+    // 脱出扉への判定（鍵所持でクリア）
+    if (Math.hypot(camera.position.x - goalPos.x, camera.position.z - goalPos.z) < 1.8) {
+        if (hasKey) {
+            triggerClear();
+        } else {
+            showMessage(`鍵がかかっている！迷路内の謎 (${solvedPuzzleCount}/${PUZZLE_COUNT}) を解け！`);
+        }
     }
 }
 
@@ -968,6 +1158,12 @@ function drawMinimap() {
             }
         }
     }
+
+    // 謎解き端末の表示（未解除＝水色、解除済み＝緑）
+    puzzles.forEach(p => {
+        minimapCtx.fillStyle = p.solved ? "#00ff88" : "#00d2ff";
+        minimapCtx.fillText("🧩", p.pos.x * scaleX, p.pos.z * scaleZ);
+    });
 
     for (const item of vanishItems) {
         if (item.active) { minimapCtx.fillStyle = "#00d2ff"; minimapCtx.fillText("★", item.pos.x * scaleX, item.pos.z * scaleZ); }
@@ -989,10 +1185,9 @@ function drawMinimap() {
         minimapCtx.fillRect(l.pos.x * scaleX - 3, l.pos.z * scaleZ - 3, 5, 5);
     }
 
+    // ミニマップ上の脱出扉
     minimapCtx.fillStyle = "#00ff88";
-    minimapCtx.fillRect(goalPos.x * scaleX - 3, goalPos.z * scaleZ - 3, 7, 7);
-
-    if (!hasKey) { minimapCtx.fillText("🔑", keyPos.x * scaleX, keyPos.z * scaleZ); }
+    minimapCtx.fillRect(goalDoor.position.x * scaleX - 4, goalDoor.position.z * scaleZ - 4, 8, 8);
 
     if (enemyVanishTimer <= 0) {
         minimapCtx.fillStyle = "#ff0000";
@@ -1018,10 +1213,10 @@ function animate() {
     requestAnimationFrame(animate);
     const delta = Math.min(clock.getDelta(), 0.1);
 
-    if (!hasKey) {
-        keyGroup.rotation.y += delta * 2;
-        keyGroup.position.y = keyPos.y + Math.sin(clock.getElapsedTime() * 3) * 0.1;
-    }
+    // 謎解き端末を回す
+    puzzles.forEach(p => {
+        if (!p.solved) p.mesh.rotation.y += delta * 1.5;
+    });
 
     vanishItems.forEach(item => { if (item.active) item.mesh.rotation.y += delta * 2; });
     decoyPickups.forEach(item => { if (item.active) item.mesh.rotation.y += delta * 2; });
