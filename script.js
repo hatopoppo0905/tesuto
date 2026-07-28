@@ -13,7 +13,7 @@ const ENEMY_SPEED = 5.5;
 const ENEMY_COUNT = 3;           
 const LOCKER_COUNT = 5;          
 const PUZZLE_COUNT = 5;          
-const REQUIRED_SOLVE_COUNT = 5; // ★ クリアに必要な謎解き数を5に変更
+const REQUIRED_SOLVE_COUNT = 5; 
 const TICKET_COUNT = 3;         
 
 const PLAYER_RADIUS = 0.6;       
@@ -32,137 +32,39 @@ const TILE = 3.0;
 const WALL_HEIGHT = 3.0;
 
 // 管理変数
-let decoyStock = 0;
+let decoyStock = 3;      
+let killStock = 0;       
 let hintTickets = 0; 
 let activeDecoy = null;
+let killItems = [];      
 
 // 謎解き管理
 let puzzles = [];
 let solvedPuzzleCount = 0;
 let currentPuzzleTarget = null; 
 
-// ★ 20パターンの問題プール
+// 20パターンの問題プール
 const ALL_PUZZLE_QUESTIONS = [
-    {
-        question: "【謎解き】\n「赤」「青」「黄」の3つのボタンがある。\n『青の隣は赤ではない。赤色は一番右。』\n一番左の色は？",
-        options: ["赤", "青", "黄"],
-        answer: 1, 
-        hint: "提示条件：[ ? , ? , 赤 ]。青と赤が隣り合わない位置を考えよう。"
-    },
-    {
-        question: "【謎解き】\n『1, 2, 4, 7, 11, ?』\n? に入る数字はどれ？",
-        options: ["15", "16", "18"],
-        answer: 1, 
-        hint: "増えている数字に注目！ (+1, +2, +3, +4, +5...)"
-    },
-    {
-        question: "【謎解き】\n『暗号：3 1 2 4』\nあ＝1, い＝2, う＝3, え＝4 とするとき、解ける言葉は？",
-        options: ["あいうえ", "うあいえ", "えいあう"],
-        answer: 1, 
-        hint: "数字をそのまま平仮名に置き換えて読んでみよう。"
-    },
-    {
-        question: "【謎解き】\n『たぬき』から『ぬ』をとると何になる？",
-        options: ["たき", "たぬ", "ぬき"],
-        answer: 0, 
-        hint: "「た・ぬ・き」の文字から「ぬ」を取り除いてみよう。"
-    },
-    {
-        question: "【謎解き】\n『南を向いている人が右を向いた。今向いている方角は？』",
-        options: ["東", "西", "北"],
-        answer: 1, 
-        hint: "南を基準にして、時計回りに90度回るとどっち？"
-    },
-    {
-        question: "【謎解き】\n『1年の中で31日がない月はいくつある？』",
-        options: ["1個", "5個", "7個"],
-        answer: 1, 
-        hint: "31日まである月は 1,3,5,7,8,10,12月（7つ）です。"
-    },
-    {
-        question: "【謎解き】\n『2, 4, 8, 16, 32, ?』\n? に入る数字はどれ？",
-        options: ["48", "64", "128"],
-        answer: 1, 
-        hint: "前の数字を毎回2倍していこう。"
-    },
-    {
-        question: "【謎解き】\n『パンはパンでも食べられないパンは？』",
-        options: ["食パン", "フライパン", "メロンパン"],
-        answer: 1, 
-        hint: "料理の時に使う道具の名前だよ。"
-    },
-    {
-        question: "【謎解き】\n『上を向いても下を向き、右を向いても左を向くものは？』",
-        options: ["影", "鏡の中の自分", "時計の針"],
-        answer: 1, 
-        hint: "自分と向き合ったとき、左右はどう映るかな？"
-    },
-    {
-        question: "【謎解き】\n『1kmの鉄と、1kmの綿。重いのはどっち？』",
-        options: ["鉄", "綿", "同じ"],
-        answer: 2, 
-        hint: "重さではなく「長さ」の単位(km)で比べられているよ。"
-    },
-    {
-        question: "【謎解き】\n『ある部屋にろうそくが10本点いている。風で2本消えた。最終的に残ったろうそくは何本？』",
-        options: ["0本", "2本", "8本"],
-        answer: 1, 
-        hint: "消えなかった8本は燃え尽きてなくなってしまいます。"
-    },
-    {
-        question: "【謎解き】\n『「お父さん」の父親の息子は誰？（※自分は一人っ子とする）』",
-        options: ["おじさん", "お父さん", "自分"],
-        answer: 1, 
-        hint: "お父さんの父親＝おじいちゃん。おじいちゃんの息子で一人っ子なら？"
-    },
-    {
-        question: "【謎解き】\n『10人の中で「2人」が抜けた。残りは何人？』",
-        options: ["8人", "10人", "12人"],
-        answer: 0, 
-        hint: "シンプルに引き算をしてみよう。10 - 2 = ?"
-    },
-    {
-        question: "【謎解き】\n『「春・夏・秋・冬」のうち、文字数が一番長いのはどれ？』",
-        options: ["春", "夏", "全て同じ"],
-        answer: 2, 
-        hint: "平仮名で書くと「はる」「なつ」「あき」「ふゆ」。"
-    },
-    {
-        question: "【謎解き】\n『「0, 1, 1, 2, 3, 5, 8, ?」』\n? に入る数字はどれ？",
-        options: ["11", "12", "13"],
-        answer: 2, 
-        hint: "前の2つの数字を足すと次の数字になるよ。(5 + 8 = ?)"
-    },
-    {
-        question: "【謎解き】\n『時計の針が「12時15分」を指している時、長針と短針のなす角度は？』",
-        options: ["90度", "82.5度", "7.5度"],
-        answer: 1, 
-        hint: "短針も15分間で少しだけ(7.5度)1時の方向へ進んでいるよ。"
-    },
-    {
-        question: "【謎解き】\n『カエルが井戸の底(10m)から毎日昼に3m登り、夜に2m滑り落ちる。脱出できるのは何日目？』",
-        options: ["8日目", "10日目", "7日目"],
-        answer: 0, 
-        hint: "1日あたり実質1m進むが、8日目の昼に3m登った時点で10mに届く！"
-    },
-    {
-        question: "【謎解き】\n『「あ・い・う・え・お」の中で、一番重い文字はどれ？』",
-        options: ["あ", "い", "お"],
-        answer: 1, 
-        hint: "「い（胃）」は体の一部で重量がある…？（なぞなぞ）"
-    },
-    {
-        question: "【謎解き】\n『リンゴが5個あります。そこから3個取りました。手元に何個ある？』",
-        options: ["2個", "3個", "5個"],
-        answer: 1, 
-        hint: "「自分が取った数」がそのまま手元に残る数だよ。"
-    },
-    {
-        question: "【謎解き】\n『「12, 1, 1, 1, 2, 1, 3, ?」次にくる数字は？』",
-        options: ["1", "2", "4"],
-        answer: 0, 
-        hint: "時計の文字盤の数字を順番に読んだときの「画数」だよ。"
-    }
+    { question: "【謎解き】\n「赤」「青」「黄」の3つのボタンがある。\n『青の隣は赤ではない。赤色は一番右。』\n一番左の色は？", options: ["赤", "青", "黄"], answer: 1, hint: "提示条件：[ ? , ? , 赤 ]。青と赤が隣り合わない位置を考えよう。" },
+    { question: "【謎解き】\n『1, 2, 4, 7, 11, ?』\n? に入る数字はどれ？", options: ["15", "16", "18"], answer: 1, hint: "増えている数字に注目！ (+1, +2, +3, +4, +5...)" },
+    { question: "【謎解き】\n『暗号：3 1 2 4』\nあ＝1, い＝2, う＝3, え＝4 とするとき、解ける言葉は？", options: ["あいうえ", "うあいえ", "えいあう"], answer: 1, hint: "数字をそのまま平仮名に置き換えて読んでみよう。" },
+    { question: "【謎解き】\n『たぬき』から『ぬ』をとると何になる？", options: ["たき", "たぬ", "ぬき"], answer: 0, hint: "「た・ぬ・き」の文字から「ぬ」を取り除いてみよう。" },
+    { question: "【謎解き】\n『南を向いている人が右を向いた。今向いている方角は？』", options: ["東", "西", "北"], answer: 1, hint: "南を基準にして、時計回りに90度回るとどっち？" },
+    { question: "【謎解き】\n『1年の中で31日がない月はいくつある？』", options: ["1個", "5個", "7個"], answer: 1, hint: "31日まである月は 1,3,5,7,8,10,12月（7つ）です。" },
+    { question: "【謎解き】\n『2, 4, 8, 16, 32, ?』\n? に入る数字はどれ？", options: ["48", "64", "128"], answer: 1, hint: "前の数字を毎回2倍していこう。" },
+    { question: "【謎解き】\n『パンはパンでも食べられないパンは？』", options: ["食パン", "フライパン", "メロンパン"], answer: 1, hint: "料理の時に使う道具の名前だよ。" },
+    { question: "【謎解き】\n『上を向いても下を向き、右を向いても左を向くものは？』", options: ["影", "鏡の中の自分", "時計の針"], answer: 1, hint: "自分と向き合ったとき、左右はどう映るかな？" },
+    { question: "【謎解き】\n『1kmの鉄と、1kmの綿。重いのはどっち？』", options: ["鉄", "綿", "同じ"], answer: 2, hint: "重さではなく「長さ」の単位(km)で比べられているよ。" },
+    { question: "【謎解き】\n『ある部屋にろうそくが10本点いている。風で2本消えた。最終的に残ったろうそくは何本？』", options: ["0本", "2本", "8本"], answer: 1, hint: "消えなかった8本は燃え尽きてなくなってしまいます。" },
+    { question: "【謎解き】\n『「お父さん」の父親の息子は誰？（※自分は一人っ子とする）』", options: ["おじさん", "お父さん", "自分"], answer: 1, hint: "お父さんの父親＝おじいちゃん。おじいちゃんの息子で一人っ子なら？" },
+    { question: "【謎解き】\n『10人の中で「2人」が抜けた。残りは何人？』", options: ["8人", "10人", "12人"], answer: 0, hint: "シンプルに引き算をしてみよう。10 - 2 = ?" },
+    { question: "【謎解き】\n『「春・夏・秋・冬」のうち、文字数が一番長いのはどれ？』", options: ["春", "夏", "全て同じ"], answer: 2, hint: "平仮名で書くと「はる」「なつ」「あき」「ふゆ」。" },
+    { question: "【謎解き】\n『「0, 1, 1, 2, 3, 5, 8, ?」』\n? に入る数字はどれ？", options: ["11", "12", "13"], answer: 2, hint: "前の2つの数字を足すと次の数字になるよ。(5 + 8 = ?)" },
+    { question: "【謎解き】\n『時計の針が「12時15分」を指している時、長針と短針のなす角度は？』", options: ["90度", "82.5度", "7.5度"], answer: 1, hint: "短針も15分間で少しだけ(7.5度)1時の方向へ進んでいるよ。" },
+    { question: "【謎解き】\n『カエルが井戸の底(10m)から毎日昼に3m登り、夜に2m滑り落ちる。脱出できるのは何日目？』", options: ["8日目", "10日目", "7日目"], answer: 0, hint: "1日あたり実質1m進むが、8日目の昼に3m登った時点で10mに届く！" },
+    { question: "【謎解き】\n『「あ・い・う・え・お」の中で、一番重い文字はどれ？』", options: ["あ", "い", "お"], answer: 1, hint: "「い（胃）」は体の一部で重量がある…？（なぞなぞ）" },
+    { question: "【謎解き】\n『リンゴが5個あります。そこから3個取りました。手元に何個ある？』", options: ["2個", "3個", "5個"], answer: 1, hint: "「自分が取った数」がそのまま手元に残る数だよ。" },
+    { question: "【謎解き】\n『「12, 1, 1, 1, 2, 1, 3, ?」次にくる数字は？』", options: ["1", "2", "4"], answer: 0, hint: "時計の文字盤の数字を順番に読んだときの「画数」だよ。" }
 ];
 
 let inputMode = "PC";
@@ -180,17 +82,29 @@ const touchUI = document.getElementById("touch-ui");
 let hasKey = false;
 let messageTimer = null;
 
+function hideElement(el) {
+    if (!el) return;
+    el.classList.add("hidden");
+    el.style.display = "none";
+}
+
+function showElement(el, displayStyle = "flex") {
+    if (!el) return;
+    el.classList.remove("hidden");
+    el.style.display = displayStyle;
+}
+
 function showMessage(text, duration = 2000) {
     if (!gameMessage) return;
     gameMessage.innerText = text;
-    gameMessage.classList.remove("hidden");
+    showElement(gameMessage, "block");
     if (messageTimer) clearTimeout(messageTimer);
     messageTimer = setTimeout(() => {
-        gameMessage.classList.add("hidden");
+        hideElement(gameMessage);
     }, duration);
 }
 
-// ポーズ画面
+// ポーズ画面の設定
 if (!pauseMenu) {
     pauseMenu = document.createElement("div");
     pauseMenu.id = "pause-menu";
@@ -205,7 +119,7 @@ if (!pauseMenu) {
     pauseMenu.style.justifyContent = "center";
     pauseMenu.style.alignItems = "center";
     pauseMenu.style.zIndex = "1000";
-    pauseMenu.classList.add("hidden");
+    hideElement(pauseMenu);
 
     const pauseTitle = document.createElement("h2");
     pauseTitle.innerText = "PAUSE";
@@ -228,7 +142,7 @@ if (!pauseMenu) {
 function pauseGame() {
     if (gameState === STATES.PLAYING) {
         gameState = STATES.PAUSED;
-        pauseMenu.classList.remove("hidden");
+        showElement(pauseMenu, "flex");
         if (document.pointerLockElement) document.exitPointerLock();
     }
 }
@@ -236,7 +150,7 @@ function pauseGame() {
 function resumeGame() {
     if (gameState === STATES.PAUSED) {
         gameState = STATES.PLAYING;
-        pauseMenu.classList.add("hidden");
+        hideElement(pauseMenu);
         if (inputMode === "PC") renderer.domElement.requestPointerLock();
     }
 }
@@ -278,12 +192,12 @@ interactBtn.style.backgroundColor = "rgba(0, 0, 0, 0.8)";
 interactBtn.style.border = "2px solid #ffffff";
 interactBtn.style.borderRadius = "12px";
 interactBtn.style.zIndex = "25";
-interactBtn.classList.add("hidden", "action-touch-btn");
+hideElement(interactBtn);
 document.body.appendChild(interactBtn);
 
 function setInteractText(text) {
-    if (!text) interactBtn.classList.add("hidden");
-    else { interactBtn.innerText = text; interactBtn.classList.remove("hidden"); }
+    if (!text) hideElement(interactBtn);
+    else { interactBtn.innerText = text; showElement(interactBtn, "block"); }
 }
 interactBtn.addEventListener("click", () => triggerInteractAction());
 
@@ -303,6 +217,17 @@ decoyBtn.style.color = "#000";
 decoyBtn.style.backgroundColor = "#ffff00";
 decoyBtn.style.border = "2px solid #ffffff";
 decoyBtn.style.borderRadius = "8px";
+decoyBtn.style.cursor = "pointer";
+
+const killBtn = document.createElement("button");
+killBtn.style.padding = "8px 12px";
+killBtn.style.fontSize = "14px";
+killBtn.style.fontWeight = "bold";
+killBtn.style.color = "#fff";
+killBtn.style.backgroundColor = "#aa0000";
+killBtn.style.border = "2px solid #ffffff";
+killBtn.style.borderRadius = "8px";
+killBtn.style.cursor = "pointer";
 
 const ticketDisplay = document.createElement("div");
 ticketDisplay.style.padding = "8px 12px";
@@ -314,14 +239,17 @@ ticketDisplay.style.border = "2px solid #ffffff";
 ticketDisplay.style.borderRadius = "8px";
 
 statusContainer.appendChild(decoyBtn);
+statusContainer.appendChild(killBtn);
 statusContainer.appendChild(ticketDisplay);
 document.body.appendChild(statusContainer);
 
 function updateStatusUI() {
-    decoyBtn.innerText = `🔔 デコイ: ${decoyStock}個`;
+    decoyBtn.innerText = `🔔 デコイ(F): ${decoyStock}個`;
+    killBtn.innerText = `💥 敵消去(G): ${killStock}個`;
     ticketDisplay.innerText = `📜 チケット: ${hintTickets}枚`;
 }
 decoyBtn.addEventListener("click", () => triggerDecoyAction());
+killBtn.addEventListener("click", () => triggerKillAction());
 
 const staminaContainer = document.createElement("div");
 staminaContainer.style.position = "absolute";
@@ -357,7 +285,7 @@ puzzleModal.style.borderRadius = "16px";
 puzzleModal.style.color = "#ffffff";
 puzzleModal.style.textAlign = "center";
 puzzleModal.style.zIndex = "100";
-puzzleModal.classList.add("hidden");
+hideElement(puzzleModal);
 
 const puzzleQuestionText = document.createElement("p");
 puzzleQuestionText.style.fontSize = "15px";
@@ -433,7 +361,7 @@ function openPuzzleModal(puzzleTarget) {
         puzzleOptionsContainer.appendChild(btn);
     });
 
-    puzzleModal.classList.remove("hidden");
+    showElement(puzzleModal, "block");
     gameState = STATES.PUZZLE;
     if (document.pointerLockElement) document.exitPointerLock();
 }
@@ -454,7 +382,7 @@ function useHintTicket() {
 }
 
 function closePuzzleModal() {
-    puzzleModal.classList.add("hidden");
+    hideElement(puzzleModal);
     currentPuzzleTarget = null;
     gameState = STATES.PLAYING;
     if (inputMode === "PC") renderer.domElement.requestPointerLock();
@@ -529,7 +457,7 @@ const dirLight = new THREE.DirectionalLight(0xffffff, 0.5);
 dirLight.position.set(10, 20, 10);
 scene.add(dirLight);
 
-// 床（落ち着いたグレー）
+// 床
 const floorMat = new THREE.MeshBasicMaterial({ color: 0x666666 });
 const floor = new THREE.Mesh(new THREE.PlaneGeometry(MAZE_WIDTH * TILE * 2, MAZE_HEIGHT * TILE * 2), floorMat);
 floor.rotation.x = -Math.PI / 2;
@@ -592,10 +520,11 @@ function buildMaze() {
     lockers.forEach(l => scene.remove(l.mesh));
     puzzles.forEach(p => scene.remove(p.mesh));
     ticketItems.forEach(item => scene.remove(item.mesh));
+    killItems.forEach(k => scene.remove(k.mesh));
     if (activeDecoy) { scene.remove(activeDecoy.mesh); activeDecoy = null; }
 
-    wallMeshes = []; walls = []; lightMeshes = []; openTiles = []; lockers = []; puzzles = []; ticketItems = [];
-    decoyStock = 0; hintTickets = 0; solvedPuzzleCount = 0; hasKey = false;
+    wallMeshes = []; walls = []; lightMeshes = []; openTiles = []; lockers = []; puzzles = []; ticketItems = []; killItems = [];
+    decoyStock = 3; killStock = 0; hintTickets = 0; solvedPuzzleCount = 0; hasKey = false;
     updateStatusUI();
 
     maze = generateMazeData(MAZE_WIDTH, MAZE_HEIGHT);
@@ -611,12 +540,12 @@ function buildMaze() {
     const shuffled = [...openTiles].sort(() => Math.random() - 0.5);
     startPos.copy(shuffled[0].pos);
 
-    // ★ 20個の謎問題からランダムに5個を選出
+    // 20個の謎問題からランダムに選出
     const randomSelectedQuestions = [...ALL_PUZZLE_QUESTIONS]
         .sort(() => Math.random() - 0.5)
         .slice(0, PUZZLE_COUNT);
 
-    // 謎解き端末配置 (5つ)
+    // 謎解き端末配置
     const puzzleGeo = new THREE.BoxGeometry(0.6, 1.2, 0.6);
     for (let i = 0; i < PUZZLE_COUNT; i++) {
         const tile = shuffled[i + 1];
@@ -646,7 +575,16 @@ function buildMaze() {
         ticketItems.push({ mesh: tMesh, pos: tile.pos.clone(), active: true });
     }
 
-    // ★ 壁の構築（ウォームグレー #a89f91）
+    // 敵消去アイテム配置
+    const killGeo = new THREE.SphereGeometry(0.35, 12, 12);
+    const killMat = new THREE.MeshBasicMaterial({ color: 0xff0055 });
+    const killTile = shuffled[PUZZLE_COUNT + TICKET_COUNT + 1];
+    const killMesh = new THREE.Mesh(killGeo, killMat);
+    killMesh.position.set(killTile.pos.x, 1.0, killTile.pos.z);
+    scene.add(killMesh);
+    killItems.push({ mesh: killMesh, pos: killTile.pos.clone(), active: true });
+
+    // 壁の構築
     const wallGeo = new THREE.BoxGeometry(TILE, WALL_HEIGHT, TILE);
     const wallMat = new THREE.MeshBasicMaterial({ color: 0xa89f91 });
 
@@ -665,26 +603,32 @@ function buildMaze() {
         }
     }
 
-    // ★ 脱出扉を壁にピッタリ貼り付ける設定
-    const edgeTiles = openTiles.filter(t => t.x === 1 || t.x === MAZE_WIDTH - 2 || t.z === 1 || t.z === MAZE_HEIGHT - 2);
-    if (edgeTiles.length > 0) {
-        const doorTile = edgeTiles[Math.floor(Math.random() * edgeTiles.length)];
-        const { x, z } = doorTile;
+    // 外周の脱出扉
+    const outerCandidates = [];
+    openTiles.forEach(t => {
+        if (t.z === 1 && maze[0][t.x] === "#") outerCandidates.push({ tile: t, dir: "NORTH" });
+        else if (t.z === MAZE_HEIGHT - 2 && maze[MAZE_HEIGHT - 1][t.x] === "#") outerCandidates.push({ tile: t, dir: "SOUTH" });
+        else if (t.x === 1 && maze[t.z][0] === "#") outerCandidates.push({ tile: t, dir: "WEST" });
+        else if (t.x === MAZE_WIDTH - 2 && maze[t.z][MAZE_WIDTH - 1] === "#") outerCandidates.push({ tile: t, dir: "EAST" });
+    });
 
+    if (outerCandidates.length > 0) {
+        const choice = outerCandidates[Math.floor(Math.random() * outerCandidates.length)];
+        const { tile, dir } = choice;
+        const shiftDist = TILE * 0.42;
         let offsetX = 0, offsetZ = 0, rotY = 0;
-        const shiftDist = TILE * 0.42; // 壁の表面にピッタリ沿わせる距離
 
-        if (maze[z - 1] && maze[z - 1][x] === "#") { offsetZ = -shiftDist; rotY = 0; }
-        else if (maze[z + 1] && maze[z + 1][x] === "#") { offsetZ = shiftDist; rotY = Math.PI; }
-        else if (maze[z][x - 1] === "#") { offsetX = -shiftDist; rotY = -Math.PI / 2; }
-        else if (maze[z][x + 1] === "#") { offsetX = shiftDist; rotY = Math.PI / 2; }
+        if (dir === "NORTH") { offsetZ = -shiftDist; rotY = 0; }
+        else if (dir === "SOUTH") { offsetZ = shiftDist; rotY = Math.PI; }
+        else if (dir === "WEST") { offsetX = -shiftDist; rotY = -Math.PI / 2; }
+        else if (dir === "EAST") { offsetX = shiftDist; rotY = Math.PI / 2; }
 
-        goalDoor.position.set(doorTile.pos.x + offsetX, WALL_HEIGHT / 2, doorTile.pos.z + offsetZ);
+        goalDoor.position.set(tile.pos.x + offsetX, WALL_HEIGHT / 2, tile.pos.z + offsetZ);
         goalDoor.rotation.y = rotY;
-        goalPos.copy(doorTile.pos);
+        goalPos.copy(tile.pos);
     }
 
-    // 天井照明
+    // 照明
     const lightFixtureGeo = new THREE.BoxGeometry(1.2, 0.1, 0.3);
     const lightFixtureMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
 
@@ -702,7 +646,7 @@ function buildMaze() {
     const lockerMat = new THREE.MeshBasicMaterial({ color: 0x2266aa });
 
     let lockerCountPlaced = 0;
-    for (const tile of shuffled.slice(PUZZLE_COUNT + TICKET_COUNT + 2)) {
+    for (const tile of shuffled.slice(PUZZLE_COUNT + TICKET_COUNT + 3)) {
         if (lockerCountPlaced >= LOCKER_COUNT) break;
 
         const { x, z } = tile;
@@ -827,7 +771,38 @@ function triggerDecoyAction() {
         scene.add(mesh);
 
         activeDecoy = { pos: mesh.position.clone(), timer: 6.0, mesh: mesh };
-        showMessage("🔔 デコイ設置！敵を引き寄せています！", 2500);
+        showMessage("🔔 デコイ設置！敵の視界判定を無効化中！", 2500);
+    }
+}
+
+function triggerKillAction() {
+    if (killStock <= 0) {
+        showMessage("敵消去アイテムを持っていません！", 1500);
+        return;
+    }
+
+    if (enemies.length === 0) {
+        showMessage("消去できる敵がいません！", 1500);
+        return;
+    }
+
+    killStock--;
+    updateStatusUI();
+
+    let nearestIdx = -1;
+    let minDist = Infinity;
+    enemies.forEach((e, index) => {
+        const d = camera.position.distanceTo(e.mesh.position);
+        if (d < minDist) {
+            minDist = d;
+            nearestIdx = index;
+        }
+    });
+
+    if (nearestIdx !== -1) {
+        const removed = enemies.splice(nearestIdx, 1)[0];
+        scene.remove(removed.mesh);
+        showMessage("💥 近くの敵を1体消去した！", 2000);
     }
 }
 
@@ -844,10 +819,10 @@ window.addEventListener("keydown", (e) => {
     if (gameState !== STATES.PLAYING) return;
     if (k === "e") triggerInteractAction();
     if (k === "f") triggerDecoyAction();
+    if (k === "g") triggerKillAction();
 });
 window.addEventListener("keyup", (e) => { keys[e.key.toLowerCase()] = false; });
 
-// マウス移動処理
 document.addEventListener("mousemove", (e) => {
     if (inputMode === "PC" && gameState === STATES.PLAYING && document.pointerLockElement === renderer.domElement) {
         if (Math.abs(e.movementX) > 300 || Math.abs(e.movementY) > 300) return;
@@ -862,7 +837,7 @@ document.addEventListener("mousemove", (e) => {
     }
 });
 
-// 敵 enemy.glb 読み込み処理
+// 敵 enemy.glb 読み込み
 const enemies = [];
 const gltfLoader = new GLTFLoader();
 let enemyTemplate = null;
@@ -892,7 +867,6 @@ function createEnemyMesh() {
         );
         body.position.y = 1.0;
         group.add(body);
-        
         group.scale.set(6, 6, 6);
         return group;
     }
@@ -932,8 +906,9 @@ function initEnemies() {
 const raycaster = new THREE.Raycaster();
 function canSeePlayer(enemyMesh) {
     if (isHiding) return false;
-    const distToPlayer = enemyMesh.position.distanceTo(camera.position);
+    if (activeDecoy) return false; 
 
+    const distToPlayer = enemyMesh.position.distanceTo(camera.position);
     if (distToPlayer > ENEMY_DETECTION_RANGE) return false;
 
     const origin = enemyMesh.position.clone(); origin.y = 1.5;
@@ -954,21 +929,22 @@ function resetGame() {
     setChaseEffect(false);
 }
 
+// ★ ゲーム開始関数（画面の完全非表示処理）
 function startGame(mode) {
     inputMode = mode || "PC";
     resetGame(); 
     gameState = STATES.PLAYING;
 
-    if (mainMenu) mainMenu.classList.add("hidden");
-    if (pauseMenu) pauseMenu.classList.add("hidden");
-    if (gameOverScreen) gameOverScreen.classList.add("hidden");
-    if (clearScreen) clearScreen.classList.add("hidden");
+    hideElement(mainMenu);
+    hideElement(pauseMenu);
+    hideElement(gameOverScreen);
+    hideElement(clearScreen);
 
     if (inputMode === "PC") {
-        if (touchUI) touchUI.classList.add("hidden");
+        hideElement(touchUI);
         renderer.domElement.requestPointerLock();
     } else {
-        if (touchUI) touchUI.classList.remove("hidden");
+        showElement(touchUI, "block");
     }
 }
 
@@ -977,54 +953,70 @@ function showMainMenu() {
     setChaseEffect(false);
     if (document.pointerLockElement) document.exitPointerLock();
 
-    if (pauseMenu) pauseMenu.classList.add("hidden");
-    if (gameOverScreen) gameOverScreen.classList.add("hidden");
-    if (clearScreen) clearScreen.classList.add("hidden");
-    if (mainMenu) mainMenu.classList.remove("hidden");
+    hideElement(pauseMenu);
+    hideElement(gameOverScreen);
+    hideElement(clearScreen);
+    showElement(mainMenu, "flex");
 }
 
 function triggerGameOver() { 
     gameState = STATES.GAMEOVER; 
     setChaseEffect(false);
     if (document.pointerLockElement) document.exitPointerLock(); 
-    if (gameOverScreen) gameOverScreen.classList.remove("hidden"); 
+    showElement(gameOverScreen, "flex"); 
 }
 
 function triggerClear() { 
     gameState = STATES.CLEAR; 
     setChaseEffect(false);
     if (document.pointerLockElement) document.exitPointerLock(); 
-    if (clearScreen) clearScreen.classList.remove("hidden"); 
+    showElement(clearScreen, "flex"); 
 }
 
-window.addEventListener("DOMContentLoaded", () => {
+// ★ イベントリスナー初期化（DOMContentLoadedと直接実行の両対応）
+function setupUIEvents() {
     const startBtn = document.getElementById("start-btn");
-    if (startBtn) startBtn.style.display = "none";
+    if (startBtn) hideElement(startBtn);
 
     const modePcBtn = document.getElementById("mode-pc-btn");
     const modeTouchBtn = document.getElementById("mode-touch-btn");
 
-    if (modePcBtn) modePcBtn.addEventListener("click", () => startGame("PC"));
-    if (modeTouchBtn) modeTouchBtn.addEventListener("click", () => startGame("TOUCH"));
+    if (modePcBtn) modePcBtn.onclick = () => startGame("PC");
+    if (modeTouchBtn) modeTouchBtn.onclick = () => startGame("TOUCH");
 
     const retryButtons = document.querySelectorAll("#retry-btn, #clear-retry-btn, #restart-btn, .retry-button, .restart-button");
     retryButtons.forEach(btn => {
-        btn.addEventListener("click", () => startGame(inputMode));
+        btn.onclick = () => startGame(inputMode);
     });
 
     const menuButtons = document.querySelectorAll("#menu-btn, #clear-menu-btn, #game-over-menu-btn, .menu-button");
     menuButtons.forEach(btn => {
-        btn.addEventListener("click", () => showMainMenu());
+        btn.onclick = () => showMainMenu();
     });
 
     const resumeButtons = document.querySelectorAll("#resume-btn, .resume-button");
     resumeButtons.forEach(btn => {
-        btn.addEventListener("click", () => resumeGame());
+        btn.onclick = () => resumeGame();
     });
-});
+}
+
+if (document.readyState === "loading") {
+    window.addEventListener("DOMContentLoaded", setupUIEvents);
+} else {
+    setupUIEvents();
+}
 
 function updateEnemies(delta) {
     if (gameState !== STATES.PLAYING) return;
+
+    if (activeDecoy) {
+        activeDecoy.timer -= delta;
+        if (activeDecoy.timer <= 0) {
+            scene.remove(activeDecoy.mesh);
+            activeDecoy = null;
+            showMessage("デコイの効果が切れた！");
+        }
+    }
 
     let isAnyEnemyChasing = false;
 
@@ -1037,7 +1029,11 @@ function updateEnemies(delta) {
         let speed = ENEMY_SPEED * 0.55;
         let targetX = null, targetZ = null;
 
-        if (canSeePlayer(e.mesh)) {
+        if (activeDecoy) {
+            speed = ENEMY_SPEED;
+            targetX = activeDecoy.pos.x;
+            targetZ = activeDecoy.pos.z;
+        } else if (canSeePlayer(e.mesh)) {
             speed = ENEMY_SPEED;
             targetX = camera.position.x;
             targetZ = camera.position.z;
@@ -1127,6 +1123,14 @@ function updatePlayer(delta) {
         }
     }
 
+    for (const k of killItems) {
+        if (k.active && camera.position.distanceTo(k.pos) < 1.2) {
+            k.active = false; k.mesh.visible = false;
+            killStock++; updateStatusUI();
+            showMessage("💥 敵消去アイテムを入手した！", 2000);
+        }
+    }
+
     if (Math.hypot(camera.position.x - goalPos.x, camera.position.z - goalPos.z) < 1.8) {
         if (hasKey) {
             triggerClear();
@@ -1143,7 +1147,6 @@ function drawMinimap() {
 
     minimapCtx.clearRect(0, 0, mapW, mapH);
 
-    // 壁
     for (let z = 0; z < MAZE_HEIGHT; z++) {
         for (let x = 0; x < MAZE_WIDTH; x++) {
             if (maze[z] && maze[z][x] === "#") {
@@ -1153,17 +1156,14 @@ function drawMinimap() {
         }
     }
 
-    // 脱出扉
     minimapCtx.fillStyle = "#00ff88";
     minimapCtx.fillRect(goalPos.x * scaleX - 4, goalPos.z * scaleZ - 4, 8, 8);
 
-    // ロッカー
     lockers.forEach(l => {
         minimapCtx.fillStyle = "#2288ff";
         minimapCtx.fillRect(l.pos.x * scaleX - 3, l.pos.z * scaleZ - 3, 6, 6);
     });
 
-    // 謎端末
     puzzles.forEach(p => {
         if (!p.solved) {
             minimapCtx.fillStyle = "#00ffff";
@@ -1178,7 +1178,6 @@ function drawMinimap() {
         }
     });
 
-    // チケット
     ticketItems.forEach(t => {
         if (t.active) {
             minimapCtx.fillStyle = "#dd88ff";
@@ -1186,7 +1185,13 @@ function drawMinimap() {
         }
     });
 
-    // 敵
+    killItems.forEach(k => {
+        if (k.active) {
+            minimapCtx.fillStyle = "#ff0055";
+            minimapCtx.fillRect(k.pos.x * scaleX - 2.5, k.pos.z * scaleZ - 2.5, 5, 5);
+        }
+    });
+
     enemies.forEach(e => {
         if (e.mesh) {
             const ex = e.mesh.position.x * scaleX, ez = e.mesh.position.z * scaleZ;
@@ -1200,7 +1205,6 @@ function drawMinimap() {
         }
     });
 
-    // プレイヤーと「向いている方向」の視界扇形
     const px = camera.position.x * scaleX, pz = camera.position.z * scaleZ;
     const dirX = -Math.sin(yaw);
     const dirZ = -Math.cos(yaw);
@@ -1230,6 +1234,7 @@ function animate() {
 
     puzzles.forEach(p => { if (!p.solved) p.mesh.rotation.y += delta * 1.5; });
     ticketItems.forEach(t => { if (t.active) t.mesh.rotation.y += delta * 2; });
+    killItems.forEach(k => { if (k.active) k.mesh.rotation.y += delta * 2; });
 
     updatePlayer(delta);
     updateEnemies(delta);
