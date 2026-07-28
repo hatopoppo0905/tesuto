@@ -2,22 +2,22 @@ import * as THREE from "three";
 import { GLTFLoader } from "https://unpkg.com/three@0.161.0/examples/jsm/loaders/GLTFLoader.js";
 
 // ====================
-// 設定値（カスタマイズ用）
+// 設定値
 // ====================
-const MOUSE_SENSITIVITY = 0.002; 
-const TOUCH_SENSITIVITY = 0.004;
-const MAX_MOUSE_DELTA = 100;
+const MOUSE_SENSITIVITY = 0.0025; 
+const TOUCH_SENSITIVITY = 0.005;
 
 const MOVE_SPEED = 5.0;          
 const DASH_SPEED = 8.5;          
-const ENEMY_SPEED = 7.5;         
+const ENEMY_SPEED = 5.5;         
 const ENEMY_COUNT = 3;           
 const LOCKER_COUNT = 5;          
-const ITEM_COUNT = 2; // 消滅アイテム(★)の出現数
-const DECOY_ITEM_COUNT = 2; // デコイアイテム(🔔)の出現数
-const PUZZLE_COUNT = 3; // 謎解き端末の数
+const PUZZLE_COUNT = 5;          
+const REQUIRED_SOLVE_COUNT = 5; // ★ クリアに必要な謎解き数を5に変更
+const TICKET_COUNT = 3;         
 
 const PLAYER_RADIUS = 0.6;       
+const ENEMY_DETECTION_RANGE = 9.0; 
 
 // スタミナ設定
 const MAX_STAMINA = 100;
@@ -31,46 +31,147 @@ const MAZE_HEIGHT = 25;
 const TILE = 3.0;        
 const WALL_HEIGHT = 3.0;
 
-// タイマー＆ストック管理
-let enemyVanishTimer = 0;
+// 管理変数
 let decoyStock = 0;
+let hintTickets = 0; 
 let activeDecoy = null;
 
 // 謎解き管理
 let puzzles = [];
 let solvedPuzzleCount = 0;
-let currentPuzzleTarget = null; // 現在アクセス中の端末
+let currentPuzzleTarget = null; 
 
-// 出題する謎のリスト（自由に追加・変更できます）
-// 出題する謎のリスト（修正版）
-const PUZZLE_QUESTIONS = [
+// ★ 20パターンの問題プール
+const ALL_PUZZLE_QUESTIONS = [
     {
-        question: "【謎解き 1】\n「赤」「青」「黄」の3つのボタンがある。\n壁の張り紙には『青の隣は赤ではない。赤色は一番右。』と書かれている。\n一番左の色は？",
+        question: "【謎解き】\n「赤」「青」「黄」の3つのボタンがある。\n『青の隣は赤ではない。赤色は一番右。』\n一番左の色は？",
         options: ["赤", "青", "黄"],
-        answer: 1 // 青（左から：青、黄、赤）
+        answer: 1, 
+        hint: "提示条件：[ ? , ? , 赤 ]。青と赤が隣り合わない位置を考えよう。"
     },
     {
-        question: "【謎解き 2】\n『1, 2, 4, 7, 11, ?』\n? に入る数字はどれ？",
+        question: "【謎解き】\n『1, 2, 4, 7, 11, ?』\n? に入る数字はどれ？",
         options: ["15", "16", "18"],
-        answer: 1 // 16 (+1, +2, +3, +4, +5)
+        answer: 1, 
+        hint: "増えている数字に注目！ (+1, +2, +3, +4, +5...)"
     },
     {
-        question: "【謎解き 3】\n『暗号：3 1 2 4』\nあ＝1, い＝2, う＝3, え＝4 とするとき、解ける言葉は？",
+        question: "【謎解き】\n『暗号：3 1 2 4』\nあ＝1, い＝2, う＝3, え＝4 とするとき、解ける言葉は？",
         options: ["あいうえ", "うあいえ", "えいあう"],
-        answer: 1 // うあいえ
+        answer: 1, 
+        hint: "数字をそのまま平仮名に置き換えて読んでみよう。"
+    },
+    {
+        question: "【謎解き】\n『たぬき』から『ぬ』をとると何になる？",
+        options: ["たき", "たぬ", "ぬき"],
+        answer: 0, 
+        hint: "「た・ぬ・き」の文字から「ぬ」を取り除いてみよう。"
+    },
+    {
+        question: "【謎解き】\n『南を向いている人が右を向いた。今向いている方角は？』",
+        options: ["東", "西", "北"],
+        answer: 1, 
+        hint: "南を基準にして、時計回りに90度回るとどっち？"
+    },
+    {
+        question: "【謎解き】\n『1年の中で31日がない月はいくつある？』",
+        options: ["1個", "5個", "7個"],
+        answer: 1, 
+        hint: "31日まである月は 1,3,5,7,8,10,12月（7つ）です。"
+    },
+    {
+        question: "【謎解き】\n『2, 4, 8, 16, 32, ?』\n? に入る数字はどれ？",
+        options: ["48", "64", "128"],
+        answer: 1, 
+        hint: "前の数字を毎回2倍していこう。"
+    },
+    {
+        question: "【謎解き】\n『パンはパンでも食べられないパンは？』",
+        options: ["食パン", "フライパン", "メロンパン"],
+        answer: 1, 
+        hint: "料理の時に使う道具の名前だよ。"
+    },
+    {
+        question: "【謎解き】\n『上を向いても下を向き、右を向いても左を向くものは？』",
+        options: ["影", "鏡の中の自分", "時計の針"],
+        answer: 1, 
+        hint: "自分と向き合ったとき、左右はどう映るかな？"
+    },
+    {
+        question: "【謎解き】\n『1kmの鉄と、1kmの綿。重いのはどっち？』",
+        options: ["鉄", "綿", "同じ"],
+        answer: 2, 
+        hint: "重さではなく「長さ」の単位(km)で比べられているよ。"
+    },
+    {
+        question: "【謎解き】\n『ある部屋にろうそくが10本点いている。風で2本消えた。最終的に残ったろうそくは何本？』",
+        options: ["0本", "2本", "8本"],
+        answer: 1, 
+        hint: "消えなかった8本は燃え尽きてなくなってしまいます。"
+    },
+    {
+        question: "【謎解き】\n『「お父さん」の父親の息子は誰？（※自分は一人っ子とする）』",
+        options: ["おじさん", "お父さん", "自分"],
+        answer: 1, 
+        hint: "お父さんの父親＝おじいちゃん。おじいちゃんの息子で一人っ子なら？"
+    },
+    {
+        question: "【謎解き】\n『10人の中で「2人」が抜けた。残りは何人？』",
+        options: ["8人", "10人", "12人"],
+        answer: 0, 
+        hint: "シンプルに引き算をしてみよう。10 - 2 = ?"
+    },
+    {
+        question: "【謎解き】\n『「春・夏・秋・冬」のうち、文字数が一番長いのはどれ？』",
+        options: ["春", "夏", "全て同じ"],
+        answer: 2, 
+        hint: "平仮名で書くと「はる」「なつ」「あき」「ふゆ」。"
+    },
+    {
+        question: "【謎解き】\n『「0, 1, 1, 2, 3, 5, 8, ?」』\n? に入る数字はどれ？",
+        options: ["11", "12", "13"],
+        answer: 2, 
+        hint: "前の2つの数字を足すと次の数字になるよ。(5 + 8 = ?)"
+    },
+    {
+        question: "【謎解き】\n『時計の針が「12時15分」を指している時、長針と短針のなす角度は？』",
+        options: ["90度", "82.5度", "7.5度"],
+        answer: 1, 
+        hint: "短針も15分間で少しだけ(7.5度)1時の方向へ進んでいるよ。"
+    },
+    {
+        question: "【謎解き】\n『カエルが井戸の底(10m)から毎日昼に3m登り、夜に2m滑り落ちる。脱出できるのは何日目？』",
+        options: ["8日目", "10日目", "7日目"],
+        answer: 0, 
+        hint: "1日あたり実質1m進むが、8日目の昼に3m登った時点で10mに届く！"
+    },
+    {
+        question: "【謎解き】\n『「あ・い・う・え・お」の中で、一番重い文字はどれ？』",
+        options: ["あ", "い", "お"],
+        answer: 1, 
+        hint: "「い（胃）」は体の一部で重量がある…？（なぞなぞ）"
+    },
+    {
+        question: "【謎解き】\n『リンゴが5個あります。そこから3個取りました。手元に何個ある？』",
+        options: ["2個", "3個", "5個"],
+        answer: 1, 
+        hint: "「自分が取った数」がそのまま手元に残る数だよ。"
+    },
+    {
+        question: "【謎解き】\n『「12, 1, 1, 1, 2, 1, 3, ?」次にくる数字は？』",
+        options: ["1", "2", "4"],
+        answer: 0, 
+        hint: "時計の文字盤の数字を順番に読んだときの「画数」だよ。"
     }
 ];
-// 操作モード（"PC" または "TOUCH"）
+
 let inputMode = "PC";
 
-// ====================
-// ゲーム状態管理
-// ====================
 const STATES = { MENU: "MENU", PLAYING: "PLAYING", PAUSED: "PAUSED", GAMEOVER: "GAMEOVER", CLEAR: "CLEAR", PUZZLE: "PUZZLE" };
 let gameState = STATES.MENU;
 
 const mainMenu = document.getElementById("main-menu");
-const pauseMenu = document.getElementById("pause-menu");
+let pauseMenu = document.getElementById("pause-menu");
 const gameOverScreen = document.getElementById("game-over-screen");
 const clearScreen = document.getElementById("clear-screen");
 const gameMessage = document.getElementById("game-message");
@@ -89,10 +190,81 @@ function showMessage(text, duration = 2000) {
     }, duration);
 }
 
-// ====================
-// UI作成（インタラクト/デコイ/スタミナ/謎解きダイアログ）
-// ====================
-// 1. ロッカー等のインタラクトボタン
+// ポーズ画面
+if (!pauseMenu) {
+    pauseMenu = document.createElement("div");
+    pauseMenu.id = "pause-menu";
+    pauseMenu.style.position = "absolute";
+    pauseMenu.style.top = "0";
+    pauseMenu.style.left = "0";
+    pauseMenu.style.width = "100%";
+    pauseMenu.style.height = "100%";
+    pauseMenu.style.backgroundColor = "rgba(0, 0, 0, 0.85)";
+    pauseMenu.style.display = "flex";
+    pauseMenu.style.flexDirection = "column";
+    pauseMenu.style.justifyContent = "center";
+    pauseMenu.style.alignItems = "center";
+    pauseMenu.style.zIndex = "1000";
+    pauseMenu.classList.add("hidden");
+
+    const pauseTitle = document.createElement("h2");
+    pauseTitle.innerText = "PAUSE";
+    pauseTitle.style.color = "#ffffff";
+    pauseTitle.style.fontSize = "36px";
+    pauseTitle.style.marginBottom = "20px";
+
+    const resumeBtn = document.createElement("button");
+    resumeBtn.innerText = "ゲームを再開";
+    resumeBtn.style.padding = "12px 24px";
+    resumeBtn.style.fontSize = "18px";
+    resumeBtn.style.cursor = "pointer";
+    resumeBtn.addEventListener("click", () => resumeGame());
+
+    pauseMenu.appendChild(pauseTitle);
+    pauseMenu.appendChild(resumeBtn);
+    document.body.appendChild(pauseMenu);
+}
+
+function pauseGame() {
+    if (gameState === STATES.PLAYING) {
+        gameState = STATES.PAUSED;
+        pauseMenu.classList.remove("hidden");
+        if (document.pointerLockElement) document.exitPointerLock();
+    }
+}
+
+function resumeGame() {
+    if (gameState === STATES.PAUSED) {
+        gameState = STATES.PLAYING;
+        pauseMenu.classList.add("hidden");
+        if (inputMode === "PC") renderer.domElement.requestPointerLock();
+    }
+}
+
+document.addEventListener("pointerlockchange", () => {
+    if (document.pointerLockElement === null && gameState === STATES.PLAYING) {
+        pauseGame();
+    }
+});
+
+// 追撃赤枠エフェクト
+const chaseOverlay = document.createElement("div");
+chaseOverlay.style.position = "absolute";
+chaseOverlay.style.top = "0";
+chaseOverlay.style.left = "0";
+chaseOverlay.style.width = "100%";
+chaseOverlay.style.height = "100%";
+chaseOverlay.style.pointerEvents = "none";
+chaseOverlay.style.boxShadow = "inset 0 0 50px rgba(255, 0, 0, 0.6)";
+chaseOverlay.style.zIndex = "15";
+chaseOverlay.style.display = "none";
+document.body.appendChild(chaseOverlay);
+
+function setChaseEffect(isChasing) {
+    chaseOverlay.style.display = isChasing ? "block" : "none";
+}
+
+// UI関連
 const interactBtn = document.createElement("button");
 interactBtn.style.position = "absolute";
 interactBtn.style.bottom = "20%";
@@ -110,43 +282,47 @@ interactBtn.classList.add("hidden", "action-touch-btn");
 document.body.appendChild(interactBtn);
 
 function setInteractText(text) {
-    if (!text) {
-        interactBtn.classList.add("hidden");
-    } else {
-        interactBtn.innerText = text;
-        interactBtn.classList.remove("hidden");
-    }
+    if (!text) interactBtn.classList.add("hidden");
+    else { interactBtn.innerText = text; interactBtn.classList.remove("hidden"); }
 }
+interactBtn.addEventListener("click", () => triggerInteractAction());
 
-interactBtn.addEventListener("click", () => {
-    triggerInteractAction();
-});
+const statusContainer = document.createElement("div");
+statusContainer.style.position = "absolute";
+statusContainer.style.top = "35px";
+statusContainer.style.left = "10px";
+statusContainer.style.display = "flex";
+statusContainer.style.gap = "8px";
+statusContainer.style.zIndex = "25";
 
-// 2. 画面左上のベル（デコイ）ボタン
 const decoyBtn = document.createElement("button");
-decoyBtn.style.position = "absolute";
-decoyBtn.style.top = "35px";
-decoyBtn.style.left = "10px";
-decoyBtn.style.padding = "8px 16px";
-decoyBtn.style.fontSize = "15px";
+decoyBtn.style.padding = "8px 12px";
+decoyBtn.style.fontSize = "14px";
 decoyBtn.style.fontWeight = "bold";
 decoyBtn.style.color = "#000";
 decoyBtn.style.backgroundColor = "#ffff00";
 decoyBtn.style.border = "2px solid #ffffff";
 decoyBtn.style.borderRadius = "8px";
-decoyBtn.style.zIndex = "25";
-decoyBtn.classList.add("action-touch-btn");
-document.body.appendChild(decoyBtn);
 
-function updateDecoyUI() {
+const ticketDisplay = document.createElement("div");
+ticketDisplay.style.padding = "8px 12px";
+ticketDisplay.style.fontSize = "14px";
+ticketDisplay.style.fontWeight = "bold";
+ticketDisplay.style.color = "#fff";
+ticketDisplay.style.backgroundColor = "rgba(150, 100, 200, 0.8)";
+ticketDisplay.style.border = "2px solid #ffffff";
+ticketDisplay.style.borderRadius = "8px";
+
+statusContainer.appendChild(decoyBtn);
+statusContainer.appendChild(ticketDisplay);
+document.body.appendChild(statusContainer);
+
+function updateStatusUI() {
     decoyBtn.innerText = `🔔 デコイ: ${decoyStock}個`;
+    ticketDisplay.innerText = `📜 チケット: ${hintTickets}枚`;
 }
+decoyBtn.addEventListener("click", () => triggerDecoyAction());
 
-decoyBtn.addEventListener("click", () => {
-    triggerDecoyAction();
-});
-
-// 3. スタミナゲージ
 const staminaContainer = document.createElement("div");
 staminaContainer.style.position = "absolute";
 staminaContainer.style.top = "10px";
@@ -163,18 +339,17 @@ const staminaBar = document.createElement("div");
 staminaBar.style.width = "100%";
 staminaBar.style.height = "100%";
 staminaBar.style.backgroundColor = "#00ff88";
-staminaBar.style.transition = "width 0.05s linear";
 staminaContainer.appendChild(staminaBar);
 document.body.appendChild(staminaContainer);
 
-// 4. 謎解きモーダル画面（自動生成）
+// 謎解きモーダル
 const puzzleModal = document.createElement("div");
 puzzleModal.style.position = "absolute";
 puzzleModal.style.top = "50%";
 puzzleModal.style.left = "50%";
 puzzleModal.style.transform = "translate(-50%, -50%)";
 puzzleModal.style.width = "85%";
-puzzleModal.style.maxWidth = "400px";
+puzzleModal.style.maxWidth = "420px";
 puzzleModal.style.padding = "20px";
 puzzleModal.style.backgroundColor = "rgba(10, 15, 30, 0.95)";
 puzzleModal.style.border = "2px solid #00d2ff";
@@ -182,15 +357,21 @@ puzzleModal.style.borderRadius = "16px";
 puzzleModal.style.color = "#ffffff";
 puzzleModal.style.textAlign = "center";
 puzzleModal.style.zIndex = "100";
-puzzleModal.style.boxShadow = "0 0 20px rgba(0,210,255,0.5)";
 puzzleModal.classList.add("hidden");
 
 const puzzleQuestionText = document.createElement("p");
-puzzleQuestionText.style.fontSize = "16px";
-puzzleQuestionText.style.lineHeight = "1.6";
+puzzleQuestionText.style.fontSize = "15px";
+puzzleQuestionText.style.lineHeight = "1.5";
 puzzleQuestionText.style.whiteSpace = "pre-wrap";
-puzzleQuestionText.style.marginBottom = "20px";
+puzzleQuestionText.style.marginBottom = "15px";
 puzzleModal.appendChild(puzzleQuestionText);
+
+const puzzleHintText = document.createElement("p");
+puzzleHintText.style.fontSize = "13px";
+puzzleHintText.style.color = "#ffdd55";
+puzzleHintText.style.marginBottom = "15px";
+puzzleHintText.style.display = "none";
+puzzleModal.appendChild(puzzleHintText);
 
 const puzzleOptionsContainer = document.createElement("div");
 puzzleOptionsContainer.style.display = "flex";
@@ -198,9 +379,23 @@ puzzleOptionsContainer.style.flexDirection = "column";
 puzzleOptionsContainer.style.gap = "10px";
 puzzleModal.appendChild(puzzleOptionsContainer);
 
+const puzzleModalFooter = document.createElement("div");
+puzzleModalFooter.style.marginTop = "15px";
+puzzleModalFooter.style.display = "flex";
+puzzleModalFooter.style.justifyContent = "space-between";
+
+const hintUseBtn = document.createElement("button");
+hintUseBtn.innerText = "📜 ヒントを使う";
+hintUseBtn.style.padding = "8px 12px";
+hintUseBtn.style.backgroundColor = "#8a2be2";
+hintUseBtn.style.color = "#fff";
+hintUseBtn.style.border = "none";
+hintUseBtn.style.borderRadius = "8px";
+hintUseBtn.style.cursor = "pointer";
+hintUseBtn.addEventListener("click", useHintTicket);
+
 const puzzleCloseBtn = document.createElement("button");
 puzzleCloseBtn.innerText = "閉じる";
-puzzleCloseBtn.style.marginTop = "15px";
 puzzleCloseBtn.style.padding = "8px 16px";
 puzzleCloseBtn.style.backgroundColor = "#444";
 puzzleCloseBtn.style.color = "#fff";
@@ -208,22 +403,25 @@ puzzleCloseBtn.style.border = "none";
 puzzleCloseBtn.style.borderRadius = "8px";
 puzzleCloseBtn.style.cursor = "pointer";
 puzzleCloseBtn.addEventListener("click", closePuzzleModal);
-puzzleModal.appendChild(puzzleCloseBtn);
 
+puzzleModalFooter.appendChild(hintUseBtn);
+puzzleModalFooter.appendChild(puzzleCloseBtn);
+puzzleModal.appendChild(puzzleModalFooter);
 document.body.appendChild(puzzleModal);
 
 function openPuzzleModal(puzzleTarget) {
     currentPuzzleTarget = puzzleTarget;
-    const qData = PUZZLE_QUESTIONS[puzzleTarget.id % PUZZLE_QUESTIONS.length];
+    const qData = puzzleTarget.questionData;
 
     puzzleQuestionText.innerText = qData.question;
+    puzzleHintText.style.display = "none";
     puzzleOptionsContainer.innerHTML = "";
 
     qData.options.forEach((optText, index) => {
         const btn = document.createElement("button");
         btn.innerText = optText;
-        btn.style.padding = "12px";
-        btn.style.fontSize = "16px";
+        btn.style.padding = "10px";
+        btn.style.fontSize = "15px";
         btn.style.fontWeight = "bold";
         btn.style.backgroundColor = "#005588";
         btn.style.color = "#ffffff";
@@ -240,6 +438,21 @@ function openPuzzleModal(puzzleTarget) {
     if (document.pointerLockElement) document.exitPointerLock();
 }
 
+function useHintTicket() {
+    if (!currentPuzzleTarget) return;
+    if (hintTickets <= 0) {
+        showMessage("ヒントチケットを持っていません！", 1500);
+        return;
+    }
+
+    hintTickets--;
+    updateStatusUI();
+
+    const qData = currentPuzzleTarget.questionData;
+    puzzleHintText.innerText = `💡 ヒント: ${qData.hint}`;
+    puzzleHintText.style.display = "block";
+}
+
 function closePuzzleModal() {
     puzzleModal.classList.add("hidden");
     currentPuzzleTarget = null;
@@ -251,17 +464,16 @@ function checkPuzzleAnswer(selectedIndex, correctIndex) {
     if (selectedIndex === correctIndex) {
         if (currentPuzzleTarget) {
             currentPuzzleTarget.solved = true;
-            currentPuzzleTarget.mesh.material.color.setHex(0x00ff88); // 緑色に変わる
-            currentPuzzleTarget.mesh.material.emissive.setHex(0x00ff88);
+            currentPuzzleTarget.mesh.visible = false;
             solvedPuzzleCount++;
 
             closePuzzleModal();
 
-            if (solvedPuzzleCount >= PUZZLE_COUNT) {
+            if (solvedPuzzleCount >= REQUIRED_SOLVE_COUNT && !hasKey) {
                 hasKey = true;
-                showMessage("【謎解き完了】すべての謎を解き、鍵を手に入れた！脱出扉へ向かえ！", 3500);
+                showMessage(`【目標達成】${REQUIRED_SOLVE_COUNT}つの謎を解き、鍵を入手した！脱出扉へ向かえ！`, 3500);
             } else {
-                showMessage(`謎を解いた！ (残り ${PUZZLE_COUNT - solvedPuzzleCount} つ)`, 2000);
+                showMessage(`謎を解いた！ (${solvedPuzzleCount}/${REQUIRED_SOLVE_COUNT})`, 2000);
             }
         }
     } else {
@@ -269,11 +481,9 @@ function checkPuzzleAnswer(selectedIndex, correctIndex) {
     }
 }
 
-// ====================
-// シーン・カメラ・レンダラー
-// ====================
+// 3D 空間設定
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x333338);
+scene.background = new THREE.Color(0x1a1a1a); 
 
 const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 100);
 const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance" });
@@ -293,20 +503,18 @@ renderer.domElement.addEventListener("click", () => {
     }
 });
 
-// ====================
-// ミニマップUI
-// ====================
+// ミニマップ
 const minimapCanvas = document.createElement("canvas");
-minimapCanvas.width = 120;
-minimapCanvas.height = 120;
+minimapCanvas.width = 150;
+minimapCanvas.height = 150;
 minimapCanvas.style.position = "absolute";
 minimapCanvas.style.top = "10px";
 minimapCanvas.style.right = "10px";
-minimapCanvas.style.width = "120px";
-minimapCanvas.style.height = "120px";
-minimapCanvas.style.border = "2px solid #ffffff";
-minimapCanvas.style.borderRadius = "8px";
-minimapCanvas.style.backgroundColor = "rgba(0, 0, 0, 0.75)";
+minimapCanvas.style.width = "150px";
+minimapCanvas.style.height = "150px";
+minimapCanvas.style.border = "3px solid #00d2ff";
+minimapCanvas.style.borderRadius = "10px";
+minimapCanvas.style.backgroundColor = "rgba(10, 15, 25, 0.9)";
 minimapCanvas.style.zIndex = "10";
 minimapCanvas.style.pointerEvents = "none";
 document.body.appendChild(minimapCanvas);
@@ -314,20 +522,26 @@ document.body.appendChild(minimapCanvas);
 const minimapCtx = minimapCanvas.getContext("2d");
 
 // ライティング
-const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
 scene.add(ambientLight);
 
-const dirLight = new THREE.DirectionalLight(0xffffff, 0.4);
+const dirLight = new THREE.DirectionalLight(0xffffff, 0.5);
 dirLight.position.set(10, 20, 10);
 scene.add(dirLight);
 
-// 床 & 屋根
-const floorMat = new THREE.MeshLambertMaterial({ color: 0x55555d });
+// 床（落ち着いたグレー）
+const floorMat = new THREE.MeshBasicMaterial({ color: 0x666666 });
 const floor = new THREE.Mesh(new THREE.PlaneGeometry(MAZE_WIDTH * TILE * 2, MAZE_HEIGHT * TILE * 2), floorMat);
 floor.rotation.x = -Math.PI / 2;
 scene.add(floor);
 
-const ceilingMat = new THREE.MeshLambertMaterial({ color: 0xaaaaaa });
+// 床グリッド
+const gridHelper = new THREE.GridHelper(MAZE_WIDTH * TILE * 2, MAZE_WIDTH * 2, 0x333333, 0x444444);
+gridHelper.position.y = 0.01;
+scene.add(gridHelper);
+
+// 天井
+const ceilingMat = new THREE.MeshBasicMaterial({ color: 0x222222 });
 const ceiling = new THREE.Mesh(new THREE.PlaneGeometry(MAZE_WIDTH * TILE * 2, MAZE_HEIGHT * TILE * 2), ceilingMat);
 ceiling.position.y = WALL_HEIGHT;
 ceiling.rotation.x = Math.PI / 2;
@@ -337,53 +551,33 @@ scene.add(ceiling);
 let maze = [];
 let walls = [];
 let wallMeshes = [];
+let lightMeshes = [];
 let openTiles = [];
 let lockers = [];
-let lightMeshes = [];
-let vanishItems = [];
-let decoyPickups = [];
+let ticketItems = [];
 
 let startPos = new THREE.Vector3();
 let goalPos = new THREE.Vector3();
 
-// 脱出扉オブジェクト
-const doorGeo = new THREE.BoxGeometry(TILE * 0.85, WALL_HEIGHT * 0.9, 0.2);
-const doorMat = new THREE.MeshLambertMaterial({ 
-    color: 0x8B4513, 
-    emissive: 0x00ff88, 
-    emissiveIntensity: 0.15,
-    transparent: true,
-    opacity: 0.95
-});
+// 脱出扉
+const doorGeo = new THREE.BoxGeometry(TILE * 0.85, WALL_HEIGHT * 0.9, 0.15);
+const doorMat = new THREE.MeshBasicMaterial({ color: 0x00ff88 });
 const goalDoor = new THREE.Group();
 const doorMain = new THREE.Mesh(doorGeo, doorMat);
 goalDoor.add(doorMain);
-
-const handleGeo = new THREE.SphereGeometry(0.12, 8, 8);
-const handleMat = new THREE.MeshLambertMaterial({ color: 0xffd700 });
-const handle = new THREE.Mesh(handleGeo, handleMat);
-handle.position.set(TILE * 0.3, 0, 0.15);
-goalDoor.add(handle);
-
 scene.add(goalDoor);
 
 function generateMazeData(w, h) {
     const grid = Array.from({ length: h }, () => Array(w).fill("#"));
 
-    function carve(x, z, lastDir = null) {
-        let dirs = [[0, -2], [0, 2], [-2, 0], [2, 0]];
-        if (lastDir && Math.random() < 0.6) {
-            dirs = dirs.sort((a, b) => (a[0] === lastDir[0] && a[1] === lastDir[1]) ? -1 : 1);
-        } else {
-            dirs.sort(() => Math.random() - 0.5);
-        }
-
+    function carve(x, z) {
+        let dirs = [[0, -2], [0, 2], [-2, 0], [2, 0]].sort(() => Math.random() - 0.5);
         for (const [dx, dz] of dirs) {
             const nx = x + dx, nz = z + dz;
             if (nx > 0 && nx < w - 1 && nz > 0 && nz < h - 1 && grid[nz][nx] === "#") {
                 grid[z + dz / 2][x + dx / 2] = " ";
                 grid[nz][nx] = " ";
-                carve(nx, nz, [dx, dz]);
+                carve(nx, nz);
             }
         }
     }
@@ -394,17 +588,15 @@ function generateMazeData(w, h) {
 
 function buildMaze() {
     wallMeshes.forEach(mesh => scene.remove(mesh));
+    lightMeshes.forEach(mesh => scene.remove(mesh));
     lockers.forEach(l => scene.remove(l.mesh));
     puzzles.forEach(p => scene.remove(p.mesh));
-    lightMeshes.forEach(mesh => scene.remove(mesh));
-    vanishItems.forEach(item => scene.remove(item.mesh));
-    decoyPickups.forEach(item => scene.remove(item.mesh));
+    ticketItems.forEach(item => scene.remove(item.mesh));
     if (activeDecoy) { scene.remove(activeDecoy.mesh); activeDecoy = null; }
 
-    wallMeshes = []; walls = []; openTiles = []; lockers = []; lightMeshes = []; puzzles = [];
-    vanishItems = []; decoyPickups = [];
-    enemyVanishTimer = 0; decoyStock = 0; solvedPuzzleCount = 0; hasKey = false;
-    updateDecoyUI();
+    wallMeshes = []; walls = []; lightMeshes = []; openTiles = []; lockers = []; puzzles = []; ticketItems = [];
+    decoyStock = 0; hintTickets = 0; solvedPuzzleCount = 0; hasKey = false;
+    updateStatusUI();
 
     maze = generateMazeData(MAZE_WIDTH, MAZE_HEIGHT);
 
@@ -419,15 +611,16 @@ function buildMaze() {
     const shuffled = [...openTiles].sort(() => Math.random() - 0.5);
     startPos.copy(shuffled[0].pos);
 
-    // 謎解き端末（青い端末）の配置
+    // ★ 20個の謎問題からランダムに5個を選出
+    const randomSelectedQuestions = [...ALL_PUZZLE_QUESTIONS]
+        .sort(() => Math.random() - 0.5)
+        .slice(0, PUZZLE_COUNT);
+
+    // 謎解き端末配置 (5つ)
     const puzzleGeo = new THREE.BoxGeometry(0.6, 1.2, 0.6);
     for (let i = 0; i < PUZZLE_COUNT; i++) {
-        const tile = shuffled[i + 1] || openTiles[i + 1];
-        const puzzleMat = new THREE.MeshLambertMaterial({ 
-            color: 0x00d2ff, 
-            emissive: 0x0088cc, 
-            emissiveIntensity: 0.5 
-        });
+        const tile = shuffled[i + 1];
+        const puzzleMat = new THREE.MeshBasicMaterial({ color: 0x00d2ff });
         const pMesh = new THREE.Mesh(puzzleGeo, puzzleMat);
         pMesh.position.set(tile.pos.x, 0.6, tile.pos.z);
         scene.add(pMesh);
@@ -436,101 +629,100 @@ function buildMaze() {
             id: i,
             mesh: pMesh,
             pos: tile.pos.clone(),
-            solved: false
+            solved: false,
+            questionData: randomSelectedQuestions[i]
         });
     }
 
-    // --- 外壁に脱出用の扉を配置 ---
-    const edgeTiles = openTiles.filter(tile => {
-        return tile.x === 1 || tile.x === MAZE_WIDTH - 2 || tile.z === 1 || tile.z === MAZE_HEIGHT - 2;
-    });
-
-    if (edgeTiles.length > 0) {
-        const doorTile = edgeTiles[Math.floor(Math.random() * edgeTiles.length)];
-        goalDoor.position.set(doorTile.pos.x, WALL_HEIGHT / 2, doorTile.pos.z);
-
-        if (doorTile.x === 1) { 
-            goalDoor.rotation.y = Math.PI / 2;
-            goalDoor.position.x -= TILE * 0.42;
-        } else if (doorTile.x === MAZE_WIDTH - 2) { 
-            goalDoor.rotation.y = -Math.PI / 2;
-            goalDoor.position.x += TILE * 0.42;
-        } else if (doorTile.z === 1) { 
-            goalDoor.rotation.y = 0;
-            goalDoor.position.z -= TILE * 0.42;
-        } else if (doorTile.z === MAZE_HEIGHT - 2) { 
-            goalDoor.rotation.y = Math.PI;
-            goalDoor.position.z += TILE * 0.42;
-        }
-        goalPos.copy(goalDoor.position);
+    // チケット配置
+    const ticketGeo = new THREE.PlaneGeometry(0.4, 0.5);
+    const ticketMat = new THREE.MeshBasicMaterial({ color: 0xddaafe, side: THREE.DoubleSide });
+    for (let i = 0; i < TICKET_COUNT; i++) {
+        const tile = shuffled[i + PUZZLE_COUNT + 1];
+        const tMesh = new THREE.Mesh(ticketGeo, ticketMat);
+        tMesh.position.set(tile.pos.x, 1.0, tile.pos.z);
+        tMesh.rotation.x = Math.PI / 4;
+        scene.add(tMesh);
+        ticketItems.push({ mesh: tMesh, pos: tile.pos.clone(), active: true });
     }
 
+    // ★ 壁の構築（ウォームグレー #a89f91）
     const wallGeo = new THREE.BoxGeometry(TILE, WALL_HEIGHT, TILE);
-    const wallMat = new THREE.MeshLambertMaterial({ color: 0x888899 });
-    const lightGeo = new THREE.BoxGeometry(0.3, 0.08, 1.5);
-    const lightMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    const wallMat = new THREE.MeshBasicMaterial({ color: 0xa89f91 });
 
     for (let z = 0; z < MAZE_HEIGHT; z++) {
         for (let x = 0; x < MAZE_WIDTH; x++) {
             if (maze[z][x] === "#") {
                 const wall = new THREE.Mesh(wallGeo, wallMat);
                 wall.position.set(x * TILE, WALL_HEIGHT / 2, z * TILE);
+
+                const edges = new THREE.EdgesGeometry(wallGeo);
+                const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x736c61 }));
+                wall.add(line);
+
                 scene.add(wall); walls.push(wall); wallMeshes.push(wall);
-            } else if ((x + z) % 3 === 0) {
-                const light = new THREE.Mesh(lightGeo, lightMat);
-                light.position.set(x * TILE, WALL_HEIGHT - 0.04, z * TILE);
-                scene.add(light); lightMeshes.push(light);
             }
         }
     }
 
-    // 消滅アイテム (★)
-    const itemGeo = new THREE.OctahedronGeometry(0.4);
-    const itemMat = new THREE.MeshBasicMaterial({ color: 0x00d2ff, wireframe: true });
-    for (let i = 0; i < ITEM_COUNT; i++) {
-        const itemTile = shuffled[i + 12] || openTiles[3];
-        const itemMesh = new THREE.Mesh(itemGeo, itemMat);
-        itemMesh.position.set(itemTile.pos.x, 1.2, itemTile.pos.z);
-        scene.add(itemMesh);
-        vanishItems.push({ mesh: itemMesh, pos: itemTile.pos.clone(), active: true });
+    // ★ 脱出扉を壁にピッタリ貼り付ける設定
+    const edgeTiles = openTiles.filter(t => t.x === 1 || t.x === MAZE_WIDTH - 2 || t.z === 1 || t.z === MAZE_HEIGHT - 2);
+    if (edgeTiles.length > 0) {
+        const doorTile = edgeTiles[Math.floor(Math.random() * edgeTiles.length)];
+        const { x, z } = doorTile;
+
+        let offsetX = 0, offsetZ = 0, rotY = 0;
+        const shiftDist = TILE * 0.42; // 壁の表面にピッタリ沿わせる距離
+
+        if (maze[z - 1] && maze[z - 1][x] === "#") { offsetZ = -shiftDist; rotY = 0; }
+        else if (maze[z + 1] && maze[z + 1][x] === "#") { offsetZ = shiftDist; rotY = Math.PI; }
+        else if (maze[z][x - 1] === "#") { offsetX = -shiftDist; rotY = -Math.PI / 2; }
+        else if (maze[z][x + 1] === "#") { offsetX = shiftDist; rotY = Math.PI / 2; }
+
+        goalDoor.position.set(doorTile.pos.x + offsetX, WALL_HEIGHT / 2, doorTile.pos.z + offsetZ);
+        goalDoor.rotation.y = rotY;
+        goalPos.copy(doorTile.pos);
     }
 
-    // デコイアイテム (🔔)
-    const decoyGeo = new THREE.ConeGeometry(0.3, 0.6, 8);
-    const decoyMat = new THREE.MeshBasicMaterial({ color: 0xffff00 });
-    for (let i = 0; i < DECOY_ITEM_COUNT; i++) {
-        const tile = shuffled[i + 15] || openTiles[4];
-        const mesh = new THREE.Mesh(decoyGeo, decoyMat);
-        mesh.position.set(tile.pos.x, 1.2, tile.pos.z);
-        scene.add(mesh);
-        decoyPickups.push({ mesh: mesh, pos: tile.pos.clone(), active: true });
-    }
+    // 天井照明
+    const lightFixtureGeo = new THREE.BoxGeometry(1.2, 0.1, 0.3);
+    const lightFixtureMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
 
-    // ロッカー設置
-    const lockerGeo = new THREE.BoxGeometry(0.8, 2.4, 0.5);
-    const lockerMat = new THREE.MeshLambertMaterial({ color: 0x2266aa });
-    const wallAdjacentTiles = shuffled.slice(6).filter(tile => {
-        const { x, z } = tile;
-        return (maze[z-1] && maze[z-1][x] === "#") || (maze[z+1] && maze[z+1][x] === "#") ||
-               (maze[z][x-1] === "#") || (maze[z][x+1] === "#");
+    openTiles.forEach((tile, index) => {
+        if (index % 3 === 0) {
+            const fixture = new THREE.Mesh(lightFixtureGeo, lightFixtureMat);
+            fixture.position.set(tile.pos.x, WALL_HEIGHT - 0.05, tile.pos.z);
+            scene.add(fixture);
+            lightMeshes.push(fixture);
+        }
     });
 
-    for (let i = 0; i < LOCKER_COUNT; i++) {
-        const tile = wallAdjacentTiles[i] || shuffled[i + 6] || openTiles[0];
+    // ロッカー配置
+    const lockerGeo = new THREE.BoxGeometry(0.8, 2.4, 0.5);
+    const lockerMat = new THREE.MeshBasicMaterial({ color: 0x2266aa });
+
+    let lockerCountPlaced = 0;
+    for (const tile of shuffled.slice(PUZZLE_COUNT + TICKET_COUNT + 2)) {
+        if (lockerCountPlaced >= LOCKER_COUNT) break;
+
+        const { x, z } = tile;
+        let offsetX = 0, offsetZ = 0, rotY = 0;
+        const shiftDist = TILE * 0.38;
+
+        if (maze[z - 1] && maze[z - 1][x] === "#") { offsetZ = -shiftDist; rotY = 0; }
+        else if (maze[z + 1] && maze[z + 1][x] === "#") { offsetZ = shiftDist; rotY = Math.PI; }
+        else if (maze[z][x - 1] === "#") { offsetX = -shiftDist; rotY = -Math.PI / 2; }
+        else if (maze[z][x + 1] === "#") { offsetX = shiftDist; rotY = Math.PI / 2; }
+        else continue;
+
         const lockerMesh = new THREE.Mesh(lockerGeo, lockerMat);
-        let offsetX = 0, offsetZ = 0, rotationY = 0;
-        const offsetDist = TILE * 0.38;
+        const lPos = new THREE.Vector3(tile.pos.x + offsetX, 1.2, tile.pos.z + offsetZ);
+        lockerMesh.position.copy(lPos);
+        lockerMesh.rotation.y = rotY;
 
-        if (maze[tile.z - 1] && maze[tile.z - 1][tile.x] === "#") { offsetZ = -offsetDist; rotationY = 0; }
-        else if (maze[tile.z + 1] && maze[tile.z + 1][tile.x] === "#") { offsetZ = offsetDist; rotationY = Math.PI; }
-        else if (maze[tile.z][tile.x - 1] === "#") { offsetX = -offsetDist; rotationY = -Math.PI / 2; }
-        else if (maze[tile.z][tile.x + 1] === "#") { offsetX = offsetDist; rotationY = Math.PI / 2; }
-
-        const lockerPos = new THREE.Vector3(tile.pos.x + offsetX, 1.2, tile.pos.z + offsetZ);
-        lockerMesh.position.copy(lockerPos);
-        lockerMesh.rotation.y = rotationY;
         scene.add(lockerMesh);
-        lockers.push({ mesh: lockerMesh, pos: lockerPos, standPos: tile.pos.clone() });
+        lockers.push({ mesh: lockerMesh, pos: lPos, standPos: tile.pos.clone() });
+        lockerCountPlaced++;
     }
 }
 
@@ -550,7 +742,6 @@ function worldToGrid(worldPos) {
     };
 }
 
-// A* 経路探索
 function findPath(startGrid, targetGrid) {
     const openSet = []; const closedSet = new Set();
     openSet.push({ x: startGrid.x, z: startGrid.z, g: 0, h: 0, f: 0, parent: null });
@@ -590,30 +781,14 @@ function findPath(startGrid, targetGrid) {
 
 function setEnemyPath(enemy, newPath) {
     enemy.path = newPath;
-    if (enemy.path.length > 1) {
-        const firstPoint = enemy.path[0];
-        const distToFirst = Math.hypot(firstPoint.x - enemy.mesh.position.x, firstPoint.z - enemy.mesh.position.z);
-        enemy.pathIndex = distToFirst < 0.8 ? 1 : 0;
-    } else {
-        enemy.pathIndex = 0;
-    }
-    enemy.repathTimer = 0;
+    enemy.pathIndex = (enemy.path.length > 1) ? 1 : 0;
 }
 
-// ====================
-// 操作ロジック（キーボード ＆ タッチ）
-// ====================
-const player = { velocityY: 0, onGround: true };
+// 操作関連
 const keys = {};
 let yaw = 0, pitch = 0;
 let isHiding = false;
 let currentLocker = null;
-
-// スマホ入力用変数
-let touchMoveDir = { x: 0, z: 0 };
-let isTouchDashing = false;
-let touchLookId = null;
-let touchLookStart = { x: 0, y: 0 };
 
 function triggerInteractAction() {
     if (isHiding) {
@@ -624,14 +799,12 @@ function triggerInteractAction() {
         return;
     }
 
-    // 謎解き端末へのアクセス
     const nearPuzzle = puzzles.find(p => !p.solved && camera.position.distanceTo(p.pos) < 2.0);
     if (nearPuzzle) {
         openPuzzleModal(nearPuzzle);
         return;
     }
 
-    // ロッカーに入る
     for (const locker of lockers) {
         if (camera.position.distanceTo(locker.pos) < 2.2) {
             isHiding = true; currentLocker = locker;
@@ -645,7 +818,7 @@ function triggerInteractAction() {
 function triggerDecoyAction() {
     if (decoyStock > 0 && !activeDecoy) {
         decoyStock--;
-        updateDecoyUI();
+        updateStatusUI();
 
         const decoyGeo = new THREE.CylinderGeometry(0.3, 0.3, 0.4, 8);
         const decoyMat = new THREE.MeshBasicMaterial({ color: 0xffff00 });
@@ -654,18 +827,15 @@ function triggerDecoyAction() {
         scene.add(mesh);
 
         activeDecoy = { pos: mesh.position.clone(), timer: 6.0, mesh: mesh };
-        showMessage("🔔 デコイを設置！敵を引き寄せている！", 2500);
-    } else if (decoyStock === 0) {
-        showMessage("デコイを持っていません！", 1500);
+        showMessage("🔔 デコイ設置！敵を引き寄せています！", 2500);
     }
 }
 
-// PC用キー操作
 window.addEventListener("keydown", (e) => { 
     const k = e.key.toLowerCase();
     keys[k] = true; 
 
-    if ((e.key === "Escape" || k === "p") && (gameState === STATES.PLAYING || gameState === STATES.PAUSED)) {
+    if (k === "p") {
         if (gameState === STATES.PLAYING) pauseGame();
         else if (gameState === STATES.PAUSED) resumeGame();
         return;
@@ -675,217 +845,120 @@ window.addEventListener("keydown", (e) => {
     if (k === "e") triggerInteractAction();
     if (k === "f") triggerDecoyAction();
 });
-
 window.addEventListener("keyup", (e) => { keys[e.key.toLowerCase()] = false; });
 
-// PC用マウス移動
+// マウス移動処理
 document.addEventListener("mousemove", (e) => {
     if (inputMode === "PC" && gameState === STATES.PLAYING && document.pointerLockElement === renderer.domElement) {
-        if (Math.abs(e.movementX) > MAX_MOUSE_DELTA || Math.abs(e.movementY) > MAX_MOUSE_DELTA) return;
+        if (Math.abs(e.movementX) > 300 || Math.abs(e.movementY) > 300) return;
+
         yaw -= e.movementX * MOUSE_SENSITIVITY;
         pitch -= e.movementY * MOUSE_SENSITIVITY;
-        const maxPitch = Math.PI / 2 - 0.1;
+
+        const maxPitch = Math.PI / 2 - 0.15;
         pitch = Math.max(-maxPitch, Math.min(maxPitch, pitch));
-        camera.rotation.set(0, 0, 0); camera.rotation.order = "YXZ";
-        camera.rotation.y = yaw; camera.rotation.x = pitch;
+
+        camera.rotation.set(pitch, yaw, 0, "YXZ");
     }
 });
 
-// ポインターロック解除時の自動ポーズ処理
-document.addEventListener("pointerlockchange", () => {
-    if (inputMode === "PC" && document.pointerLockElement !== renderer.domElement && gameState === STATES.PLAYING) {
-        pauseGame();
-    }
-});
-
-// スマホ用タッチ操作
-window.addEventListener("touchstart", (e) => {
-    if (inputMode !== "TOUCH" || gameState !== STATES.PLAYING) return;
-    for (let i = 0; i < e.changedTouches.length; i++) {
-        const touch = e.changedTouches[i];
-        if (touch.clientX > window.innerWidth / 2 && touchLookId === null) {
-            touchLookId = touch.identifier;
-            touchLookStart = { x: touch.clientX, y: touch.clientY };
-        }
-    }
-});
-
-window.addEventListener("touchmove", (e) => {
-    if (inputMode !== "TOUCH" || gameState !== STATES.PLAYING) return;
-    for (let i = 0; i < e.changedTouches.length; i++) {
-        const touch = e.changedTouches[i];
-        if (touch.identifier === touchLookId) {
-            const dx = touch.clientX - touchLookStart.x;
-            const dy = touch.clientY - touchLookStart.y;
-            
-            yaw -= dx * TOUCH_SENSITIVITY;
-            pitch -= dy * TOUCH_SENSITIVITY;
-            const maxPitch = Math.PI / 2 - 0.1;
-            pitch = Math.max(-maxPitch, Math.min(maxPitch, pitch));
-            
-            camera.rotation.set(0, 0, 0); camera.rotation.order = "YXZ";
-            camera.rotation.y = yaw; camera.rotation.x = pitch;
-
-            touchLookStart = { x: touch.clientX, y: touch.clientY };
-        }
-    }
-});
-
-const resetTouchLook = (e) => {
-    for (let i = 0; i < e.changedTouches.length; i++) {
-        if (e.changedTouches[i].identifier === touchLookId) touchLookId = null;
-    }
-};
-window.addEventListener("touchend", resetTouchLook);
-window.addEventListener("touchcancel", resetTouchLook);
-
-// スマホ用バーチャルジョイスティック
-const joystickContainer = document.getElementById("joystick-container");
-const joystickKnob = document.getElementById("joystick-knob");
-let joystickTouchId = null;
-
-if (joystickContainer) {
-    joystickContainer.addEventListener("touchstart", (e) => {
-        if (joystickTouchId === null && e.changedTouches.length > 0) {
-            const touch = e.changedTouches[0];
-            joystickTouchId = touch.identifier;
-            updateJoystick(touch);
-        }
-    });
-
-    joystickContainer.addEventListener("touchmove", (e) => {
-        for (let i = 0; i < e.changedTouches.length; i++) {
-            if (e.changedTouches[i].identifier === joystickTouchId) {
-                updateJoystick(e.changedTouches[i]);
-            }
-        }
-    });
-
-    const stopJoystick = (e) => {
-        for (let i = 0; i < e.changedTouches.length; i++) {
-            if (e.changedTouches[i].identifier === joystickTouchId) {
-                joystickTouchId = null;
-                touchMoveDir = { x: 0, z: 0 };
-                joystickKnob.style.transform = `translate(0px, 0px)`;
-            }
-        }
-    };
-    joystickContainer.addEventListener("touchend", stopJoystick);
-    joystickContainer.addEventListener("touchcancel", stopJoystick);
-}
-
-function updateJoystick(touch) {
-    const rect = joystickContainer.getBoundingClientRect();
-    const centerX = rect.left + rect.width / 2;
-    const centerY = rect.top + rect.height / 2;
-
-    let dx = touch.clientX - centerX;
-    let dy = touch.clientY - centerY;
-    const maxRadius = rect.width / 2;
-
-    const dist = Math.hypot(dx, dy);
-    if (dist > maxRadius) {
-        dx = (dx / dist) * maxRadius;
-        dy = (dy / dist) * maxRadius;
-    }
-
-    joystickKnob.style.transform = `translate(${dx}px, ${dy}px)`;
-    touchMoveDir = { x: dx / maxRadius, z: dy / maxRadius };
-}
-
-// スマホ用ダッシュボタン（トグル切り替え式）
-const touchDashBtn = document.getElementById("touch-dash-btn");
-if (touchDashBtn) {
-    touchDashBtn.style.top = "auto";
-    touchDashBtn.style.bottom = "20%";
-    touchDashBtn.style.right = "20px";
-
-    const toggleDash = (e) => {
-        e.preventDefault();
-        isTouchDashing = !isTouchDashing;
-        if (isTouchDashing) {
-            touchDashBtn.classList.add("active");
-        } else {
-            touchDashBtn.classList.remove("active");
-        }
-    };
-
-    touchDashBtn.addEventListener("touchstart", toggleDash);
-}
-
-// ====================
-// 敵 AI
-// ====================
+// 敵 enemy.glb 読み込み処理
 const enemies = [];
-const loader = new GLTFLoader();
+const gltfLoader = new GLTFLoader();
+let enemyTemplate = null;
 
-function createEnemyObj() {
-    const group = new THREE.Group();
-    loader.load("./enemy.glb", (gltf) => {
-        const model = gltf.scene; model.scale.set(3.0, 3.0, 3.0); group.add(model);
-    }, undefined, () => {
-        const geometry = new THREE.BoxGeometry(1.2, 2.8, 1.2);
-        const material = new THREE.MeshLambertMaterial({ color: 0xcc0000 });
-        group.add(new THREE.Mesh(geometry, material));
-    });
-    scene.add(group);
-    return group;
-}
+gltfLoader.load(
+    "./enemy.glb",
+    (gltf) => {
+        enemyTemplate = gltf.scene;
+        enemyTemplate.scale.set(6, 6, 6);
+        initEnemies();
+    },
+    undefined,
+    (error) => {
+        console.warn("enemy.glb の読み込みに失敗したため、代替オブジェクトを使用します。", error);
+        initEnemies();
+    }
+);
 
-for (let i = 0; i < ENEMY_COUNT; i++) {
-    enemies.push({ mesh: createEnemyObj(), path: [], pathIndex: 0, repathTimer: 0 });
+function createEnemyMesh() {
+    if (enemyTemplate) {
+        return enemyTemplate.clone(true);
+    } else {
+        const group = new THREE.Group();
+        const body = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.8, 0.8, 2.0, 12),
+            new THREE.MeshBasicMaterial({ color: 0xcc0000 })
+        );
+        body.position.y = 1.0;
+        group.add(body);
+        
+        group.scale.set(6, 6, 6);
+        return group;
+    }
 }
 
 function assignNewRandomPath(enemy) {
     if (openTiles.length === 0) return;
     const currentGrid = worldToGrid(enemy.mesh.position);
-    const farTiles = openTiles.filter(t => Math.hypot(t.x - currentGrid.x, t.z - currentGrid.z) > 6);
-    const targetTile = farTiles.length > 0 ? farTiles[Math.floor(Math.random() * farTiles.length)] : openTiles[0];
-
+    const targetTile = openTiles[Math.floor(Math.random() * openTiles.length)];
     const path = findPath(currentGrid, { x: targetTile.x, z: targetTile.z });
     setEnemyPath(enemy, path);
 }
 
 function initEnemies() {
-    const shuffled = [...openTiles].sort(() => Math.random() - 0.5);
-    enemies.forEach((e, idx) => {
-        const spawnTile = shuffled[idx + 5] || openTiles[0];
-        e.mesh.position.copy(spawnTile.pos); e.mesh.position.y = 1.4; e.mesh.visible = true;
-        assignNewRandomPath(e);
+    if (openTiles.length === 0) return;
+
+    enemies.forEach(e => {
+        if (e.mesh) scene.remove(e.mesh);
     });
+    enemies.length = 0;
+
+    const shuffled = [...openTiles].sort(() => Math.random() - 0.5);
+
+    for (let i = 0; i < ENEMY_COUNT; i++) {
+        const mesh = createEnemyMesh();
+        const spawnTile = shuffled[i + 8] || openTiles[0];
+        
+        mesh.position.set(spawnTile.pos.x, 0, spawnTile.pos.z);
+        scene.add(mesh);
+
+        const enemyObj = { mesh: mesh, path: [], pathIndex: 0 };
+        enemies.push(enemyObj);
+        assignNewRandomPath(enemyObj);
+    }
 }
 
 const raycaster = new THREE.Raycaster();
 function canSeePlayer(enemyMesh) {
     if (isHiding) return false;
+    const distToPlayer = enemyMesh.position.distanceTo(camera.position);
+
+    if (distToPlayer > ENEMY_DETECTION_RANGE) return false;
+
     const origin = enemyMesh.position.clone(); origin.y = 1.5;
     const target = camera.position.clone();
     const direction = target.sub(origin).normalize();
-    const distToPlayer = enemyMesh.position.distanceTo(camera.position);
 
     raycaster.set(origin, direction);
     const intersects = raycaster.intersectObjects(walls);
     return !(intersects.length > 0 && intersects[0].distance < distToPlayer);
 }
 
-// ====================
-// ゲーム状態遷移関数
-// ====================
 function resetGame() {
     buildMaze();
     stamina = MAX_STAMINA; isHiding = false; currentLocker = null;
-    isTouchDashing = false;
-    if (touchDashBtn) touchDashBtn.classList.remove("active");
-
     camera.position.copy(startPos); camera.position.y = 1.5;
-    player.velocityY = 0; player.onGround = true; yaw = 0; pitch = 0;
-    camera.rotation.set(0, 0, 0);
+    yaw = 0; pitch = 0; camera.rotation.set(0, 0, 0);
     initEnemies();
+    setChaseEffect(false);
 }
 
-function startGame() {
+function startGame(mode) {
+    inputMode = mode || "PC";
     resetGame(); 
     gameState = STATES.PLAYING;
+
     if (mainMenu) mainMenu.classList.add("hidden");
     if (pauseMenu) pauseMenu.classList.add("hidden");
     if (gameOverScreen) gameOverScreen.classList.add("hidden");
@@ -899,121 +972,78 @@ function startGame() {
     }
 }
 
-function pauseGame() { 
-    if (gameState !== STATES.PLAYING) return;
-    gameState = STATES.PAUSED; 
-    if (pauseMenu) pauseMenu.classList.remove("hidden"); 
-    if (document.pointerLockElement) document.exitPointerLock();
-}
-
-function resumeGame() {
-    gameState = STATES.PLAYING;
-    if (pauseMenu) pauseMenu.classList.add("hidden");
-    if (inputMode === "PC") renderer.domElement.requestPointerLock();
-}
-
 function showMainMenu() {
     gameState = STATES.MENU;
+    setChaseEffect(false);
     if (document.pointerLockElement) document.exitPointerLock();
-    if (mainMenu) mainMenu.classList.remove("hidden");
+
     if (pauseMenu) pauseMenu.classList.add("hidden");
-    if (gameOverScreen) gameOverScreen.classList.remove("hidden");
+    if (gameOverScreen) gameOverScreen.classList.add("hidden");
     if (clearScreen) clearScreen.classList.add("hidden");
-    if (touchUI) touchUI.classList.add("hidden");
+    if (mainMenu) mainMenu.classList.remove("hidden");
 }
 
 function triggerGameOver() { 
     gameState = STATES.GAMEOVER; 
+    setChaseEffect(false);
     if (document.pointerLockElement) document.exitPointerLock(); 
     if (gameOverScreen) gameOverScreen.classList.remove("hidden"); 
 }
 
 function triggerClear() { 
     gameState = STATES.CLEAR; 
+    setChaseEffect(false);
     if (document.pointerLockElement) document.exitPointerLock(); 
     if (clearScreen) clearScreen.classList.remove("hidden"); 
 }
 
-// メインメニューのモード選択＝即ゲームスタート
 window.addEventListener("DOMContentLoaded", () => {
-    const bindBtn = (id, func) => { const btn = document.getElementById(id); if (btn) btn.addEventListener("click", func); };
-    bindBtn("resume-btn", resumeGame); 
-    bindBtn("restart-btn", startGame);
-    bindBtn("menu-btn", showMainMenu); 
-    bindBtn("retry-btn", startGame); 
-    bindBtn("gameover-menu-btn", showMainMenu);
-    bindBtn("clear-retry-btn", startGame); 
-    bindBtn("clear-menu-btn", showMainMenu);
-
     const startBtn = document.getElementById("start-btn");
     if (startBtn) startBtn.style.display = "none";
 
     const modePcBtn = document.getElementById("mode-pc-btn");
     const modeTouchBtn = document.getElementById("mode-touch-btn");
 
-    if (modePcBtn) {
-        modePcBtn.addEventListener("click", () => {
-            inputMode = "PC";
-            startGame();
-        });
-    }
+    if (modePcBtn) modePcBtn.addEventListener("click", () => startGame("PC"));
+    if (modeTouchBtn) modeTouchBtn.addEventListener("click", () => startGame("TOUCH"));
 
-    if (modeTouchBtn) {
-        modeTouchBtn.addEventListener("click", () => {
-            inputMode = "TOUCH";
-            startGame();
-        });
-    }
+    const retryButtons = document.querySelectorAll("#retry-btn, #clear-retry-btn, #restart-btn, .retry-button, .restart-button");
+    retryButtons.forEach(btn => {
+        btn.addEventListener("click", () => startGame(inputMode));
+    });
+
+    const menuButtons = document.querySelectorAll("#menu-btn, #clear-menu-btn, #game-over-menu-btn, .menu-button");
+    menuButtons.forEach(btn => {
+        btn.addEventListener("click", () => showMainMenu());
+    });
+
+    const resumeButtons = document.querySelectorAll("#resume-btn, .resume-button");
+    resumeButtons.forEach(btn => {
+        btn.addEventListener("click", () => resumeGame());
+    });
 });
 
-// ====================
-// フレーム更新処理
-// ====================
 function updateEnemies(delta) {
     if (gameState !== STATES.PLAYING) return;
 
-    if (activeDecoy) {
-        activeDecoy.timer -= delta;
-        if (activeDecoy.timer <= 0) {
-            scene.remove(activeDecoy.mesh);
-            activeDecoy = null;
-            showMessage("デコイの効果が切れた！", 1500);
-        }
-    }
-
-    if (enemyVanishTimer > 0) {
-        enemyVanishTimer -= delta;
-        enemies.forEach(e => e.mesh.visible = false);
-        if (enemyVanishTimer <= 0) {
-            enemyVanishTimer = 0; enemies.forEach(e => e.mesh.visible = true); showMessage("敵が再出現した！", 1500);
-        } else {
-            showMessage(`敵消滅中！ (残り ${enemyVanishTimer.toFixed(1)}秒)`, 100);
-            return;
-        }
-    }
+    let isAnyEnemyChasing = false;
 
     for (const e of enemies) {
+        if (!e.mesh) continue;
+
         const distToPlayer = Math.hypot(camera.position.x - e.mesh.position.x, camera.position.z - e.mesh.position.z);
         if (!isHiding && distToPlayer < 1.3) { triggerGameOver(); return; }
 
         let speed = ENEMY_SPEED * 0.55;
         let targetX = null, targetZ = null;
 
-        if (activeDecoy) {
-            speed = ENEMY_SPEED;
-            e.repathTimer += delta;
-            if (e.repathTimer > 0.3) {
-                const p = findPath(worldToGrid(e.mesh.position), worldToGrid(activeDecoy.pos));
-                setEnemyPath(e, p);
-            }
-        } 
-        else if (canSeePlayer(e.mesh)) {
+        if (canSeePlayer(e.mesh)) {
             speed = ENEMY_SPEED;
             targetX = camera.position.x;
             targetZ = camera.position.z;
-            e.path = [];
-        } else {
-            if (!e.path || e.pathIndex >= e.path.length) assignNewRandomPath(e);
+            isAnyEnemyChasing = true;
+        } else if (!e.path || e.pathIndex >= e.path.length) {
+            assignNewRandomPath(e);
         }
 
         if (targetX !== null && targetZ !== null) {
@@ -1024,15 +1054,9 @@ function updateEnemies(delta) {
             if (dist > 0.1) {
                 e.mesh.position.x += (dirX / dist) * speed * delta;
                 e.mesh.position.z += (dirZ / dist) * speed * delta;
-                
-                const targetAngle = Math.atan2(dirX, dirZ);
-                let diff = targetAngle - e.mesh.rotation.y;
-                while (diff < -Math.PI) diff += Math.PI * 2;
-                while (diff > Math.PI) diff -= Math.PI * 2;
-                e.mesh.rotation.y += diff * Math.min(1.0, delta * 12);
+                e.mesh.rotation.y = Math.atan2(dirX, dirZ);
             }
-        } 
-        else if (e.path && e.pathIndex < e.path.length) {
+        } else if (e.path && e.pathIndex < e.path.length) {
             const waypoint = e.path[e.pathIndex];
             const dirX = waypoint.x - e.mesh.position.x;
             const dirZ = waypoint.z - e.mesh.position.z;
@@ -1043,15 +1067,12 @@ function updateEnemies(delta) {
             } else {
                 e.mesh.position.x += (dirX / dist) * speed * delta;
                 e.mesh.position.z += (dirZ / dist) * speed * delta;
-                
-                const targetAngle = Math.atan2(dirX, dirZ);
-                let diff = targetAngle - e.mesh.rotation.y;
-                while (diff < -Math.PI) diff += Math.PI * 2;
-                while (diff > Math.PI) diff -= Math.PI * 2;
-                e.mesh.rotation.y += diff * Math.min(1.0, delta * 12);
+                e.mesh.rotation.y = Math.atan2(dirX, dirZ);
             }
         }
     }
+
+    setChaseEffect(isAnyEnemyChasing);
 }
 
 function updatePlayer(delta) {
@@ -1059,13 +1080,11 @@ function updatePlayer(delta) {
 
     if (isHiding) {
         setInteractText("ロッカーから出る");
-        if (currentLocker) camera.position.set(currentLocker.pos.x, 1.5, currentLocker.pos.z);
         return;
     }
 
-    // 周囲のアクション判定（謎解き/ロッカー）
     const nearPuzzle = puzzles.find(p => !p.solved && camera.position.distanceTo(p.pos) < 2.0);
-    let nearLocker = lockers.find(l => camera.position.distanceTo(l.pos) < 2.2);
+    const nearLocker = lockers.find(l => camera.position.distanceTo(l.pos) < 2.2);
 
     if (nearPuzzle) {
         setInteractText("🧩 謎を解く");
@@ -1075,25 +1094,16 @@ function updatePlayer(delta) {
         setInteractText(null);
     }
 
-    const isMovingPC = keys["w"] || keys["s"] || keys["a"] || keys["d"];
-    const isMovingTouch = Math.hypot(touchMoveDir.x, touchMoveDir.z) > 0.1;
-    const isMoving = isMovingPC || isMovingTouch;
-
-    let isDashing = (keys["shift"] || isTouchDashing) && isMoving && stamina > 0;
+    const isMoving = keys["w"] || keys["s"] || keys["a"] || keys["d"];
+    let isDashing = keys["shift"] && isMoving && stamina > 0;
 
     if (isDashing) {
         stamina = Math.max(0, stamina - STAMINA_DRAIN * delta);
-        if (stamina === 0) {
-            isDashing = false;
-            isTouchDashing = false;
-            if (touchDashBtn) touchDashBtn.classList.remove("active");
-        }
     } else {
         stamina = Math.min(MAX_STAMINA, stamina + STAMINA_RECOVER * delta);
     }
 
     staminaBar.style.width = `${(stamina / MAX_STAMINA) * 100}%`;
-    staminaBar.style.backgroundColor = stamina < 20 ? "#ff3333" : "#00ff88";
 
     let speed = isDashing ? DASH_SPEED : MOVE_SPEED;
     const forwardX = -Math.sin(yaw), forwardZ = -Math.cos(yaw);
@@ -1101,43 +1111,27 @@ function updatePlayer(delta) {
     const moveStep = speed * delta;
     let dx = 0, dz = 0;
 
-    if (inputMode === "PC") {
-        if (keys["w"]) { dx += forwardX * moveStep; dz += forwardZ * moveStep; }
-        if (keys["s"]) { dx -= forwardX * moveStep; dz -= forwardZ * moveStep; }
-        if (keys["a"]) { dx -= rightX * moveStep; dz -= rightZ * moveStep; }
-        if (keys["d"]) { dx += rightX * moveStep; dz += rightZ * moveStep; }
-    } else {
-        const moveForward = -touchMoveDir.z;
-        const moveRight = touchMoveDir.x;
-        dx += (forwardX * moveForward + rightX * moveRight) * moveStep;
-        dz += (forwardZ * moveForward + rightZ * moveRight) * moveStep;
-    }
+    if (keys["w"]) { dx += forwardX * moveStep; dz += forwardZ * moveStep; }
+    if (keys["s"]) { dx -= forwardX * moveStep; dz -= forwardZ * moveStep; }
+    if (keys["a"]) { dx -= rightX * moveStep; dz -= rightZ * moveStep; }
+    if (keys["d"]) { dx += rightX * moveStep; dz += rightZ * moveStep; }
 
-    if (!hitWall(camera.position.x + dx, camera.position.z, PLAYER_RADIUS)) camera.position.x += dx;
-    if (!hitWall(camera.position.x, camera.position.z + dz, PLAYER_RADIUS)) camera.position.z += dz;
-    camera.position.y = 1.5;
+    if (!hitWall(camera.position.x + dx, camera.position.z)) camera.position.x += dx;
+    if (!hitWall(camera.position.x, camera.position.z + dz)) camera.position.z += dz;
 
-    for (const item of vanishItems) {
-        if (item.active && camera.position.distanceTo(item.pos) < 1.2) {
-            item.active = false; item.mesh.visible = false;
-            enemyVanishTimer = 5.0; showMessage("閃光弾を取得！敵が5秒間消滅！", 2000);
+    for (const t of ticketItems) {
+        if (t.active && camera.position.distanceTo(t.pos) < 1.2) {
+            t.active = false; t.mesh.visible = false;
+            hintTickets++; updateStatusUI();
+            showMessage("📜 ヒントチケットを入手した！", 2000);
         }
     }
 
-    for (const item of decoyPickups) {
-        if (item.active && camera.position.distanceTo(item.pos) < 1.2) {
-            item.active = false; item.mesh.visible = false;
-            decoyStock++; updateDecoyUI();
-            showMessage("🔔 デコイを取得！(ボタンで設置)", 2000);
-        }
-    }
-
-    // 脱出扉への判定（鍵所持でクリア）
     if (Math.hypot(camera.position.x - goalPos.x, camera.position.z - goalPos.z) < 1.8) {
         if (hasKey) {
             triggerClear();
         } else {
-            showMessage(`鍵がかかっている！迷路内の謎 (${solvedPuzzleCount}/${PUZZLE_COUNT}) を解け！`);
+            showMessage(`鍵がかかっている！謎を ${REQUIRED_SOLVE_COUNT} つ解け！ (${solvedPuzzleCount}/${REQUIRED_SOLVE_COUNT})`);
         }
     }
 }
@@ -1148,78 +1142,94 @@ function drawMinimap() {
     const scaleX = mapW / (MAZE_WIDTH * TILE), scaleZ = mapH / (MAZE_HEIGHT * TILE);
 
     minimapCtx.clearRect(0, 0, mapW, mapH);
-    minimapCtx.textAlign = "center"; minimapCtx.textBaseline = "middle"; minimapCtx.font = "11px sans-serif";
 
+    // 壁
     for (let z = 0; z < MAZE_HEIGHT; z++) {
         for (let x = 0; x < MAZE_WIDTH; x++) {
             if (maze[z] && maze[z][x] === "#") {
-                minimapCtx.fillStyle = "#555555";
+                minimapCtx.fillStyle = "#a89f91";
                 minimapCtx.fillRect(x * TILE * scaleX, z * TILE * scaleZ, TILE * scaleX, TILE * scaleZ);
             }
         }
     }
 
-    // 謎解き端末の表示（未解除＝水色、解除済み＝緑）
-    puzzles.forEach(p => {
-        minimapCtx.fillStyle = p.solved ? "#00ff88" : "#00d2ff";
-        minimapCtx.fillText("🧩", p.pos.x * scaleX, p.pos.z * scaleZ);
+    // 脱出扉
+    minimapCtx.fillStyle = "#00ff88";
+    minimapCtx.fillRect(goalPos.x * scaleX - 4, goalPos.z * scaleZ - 4, 8, 8);
+
+    // ロッカー
+    lockers.forEach(l => {
+        minimapCtx.fillStyle = "#2288ff";
+        minimapCtx.fillRect(l.pos.x * scaleX - 3, l.pos.z * scaleZ - 3, 6, 6);
     });
 
-    for (const item of vanishItems) {
-        if (item.active) { minimapCtx.fillStyle = "#00d2ff"; minimapCtx.fillText("★", item.pos.x * scaleX, item.pos.z * scaleZ); }
-    }
-
-    for (const item of decoyPickups) {
-        if (item.active) { minimapCtx.fillStyle = "#ffff00"; minimapCtx.fillText("🔔", item.pos.x * scaleX, item.pos.z * scaleZ); }
-    }
-
-    if (activeDecoy) {
-        minimapCtx.fillStyle = "#ffaa00";
-        minimapCtx.beginPath();
-        minimapCtx.arc(activeDecoy.pos.x * scaleX, activeDecoy.pos.z * scaleZ, 4, 0, Math.PI * 2);
-        minimapCtx.fill();
-    }
-
-    for (const l of lockers) {
-        minimapCtx.fillStyle = "#0088ff";
-        minimapCtx.fillRect(l.pos.x * scaleX - 3, l.pos.z * scaleZ - 3, 5, 5);
-    }
-
-    // ミニマップ上の脱出扉
-    minimapCtx.fillStyle = "#00ff88";
-    minimapCtx.fillRect(goalDoor.position.x * scaleX - 4, goalDoor.position.z * scaleZ - 4, 8, 8);
-
-    if (enemyVanishTimer <= 0) {
-        minimapCtx.fillStyle = "#ff0000";
-        for (const e of enemies) {
-            minimapCtx.beginPath(); minimapCtx.arc(e.mesh.position.x * scaleX, e.mesh.position.z * scaleZ, 3.5, 0, Math.PI * 2); minimapCtx.fill();
+    // 謎端末
+    puzzles.forEach(p => {
+        if (!p.solved) {
+            minimapCtx.fillStyle = "#00ffff";
+            minimapCtx.beginPath();
+            const cx = p.pos.x * scaleX, cz = p.pos.z * scaleZ;
+            minimapCtx.moveTo(cx, cz - 4);
+            minimapCtx.lineTo(cx + 4, cz);
+            minimapCtx.lineTo(cx, cz + 4);
+            minimapCtx.lineTo(cx - 4, cz);
+            minimapCtx.closePath();
+            minimapCtx.fill();
         }
-    }
+    });
 
+    // チケット
+    ticketItems.forEach(t => {
+        if (t.active) {
+            minimapCtx.fillStyle = "#dd88ff";
+            minimapCtx.fillRect(t.pos.x * scaleX - 2, t.pos.z * scaleZ - 2, 4, 4);
+        }
+    });
+
+    // 敵
+    enemies.forEach(e => {
+        if (e.mesh) {
+            const ex = e.mesh.position.x * scaleX, ez = e.mesh.position.z * scaleZ;
+            minimapCtx.fillStyle = "#ff0033";
+            minimapCtx.strokeStyle = "#ffffff";
+            minimapCtx.lineWidth = 1;
+            minimapCtx.beginPath();
+            minimapCtx.arc(ex, ez, 4, 0, Math.PI * 2);
+            minimapCtx.fill();
+            minimapCtx.stroke();
+        }
+    });
+
+    // プレイヤーと「向いている方向」の視界扇形
     const px = camera.position.x * scaleX, pz = camera.position.z * scaleZ;
-    minimapCtx.fillStyle = isHiding ? "#88ff88" : "#00ff00";
-    minimapCtx.beginPath(); minimapCtx.arc(px, pz, 3.5, 0, Math.PI * 2); minimapCtx.fill();
+    const dirX = -Math.sin(yaw);
+    const dirZ = -Math.cos(yaw);
+    const fovAngle = Math.PI / 3;
+    const baseAngle = Math.atan2(dirZ, dirX);
 
-    minimapCtx.strokeStyle = isHiding ? "#88ff88" : "#00ff00";
-    minimapCtx.lineWidth = 2;
-    minimapCtx.beginPath(); minimapCtx.moveTo(px, pz);
-    minimapCtx.lineTo(px - Math.sin(yaw) * 7, pz - Math.cos(yaw) * 7); minimapCtx.stroke();
-    minimapCtx.lineWidth = 1;
+    minimapCtx.fillStyle = "rgba(255, 255, 100, 0.4)";
+    minimapCtx.beginPath();
+    minimapCtx.moveTo(px, pz);
+    minimapCtx.arc(px, pz, 16, baseAngle - fovAngle / 2, baseAngle + fovAngle / 2);
+    minimapCtx.closePath();
+    minimapCtx.fill();
+
+    minimapCtx.fillStyle = "#00ff00";
+    minimapCtx.strokeStyle = "#000000";
+    minimapCtx.lineWidth = 1.5;
+    minimapCtx.beginPath();
+    minimapCtx.arc(px, pz, 4.5, 0, Math.PI * 2);
+    minimapCtx.fill();
+    minimapCtx.stroke();
 }
 
-// メインループ
 const clock = new THREE.Clock();
 function animate() {
     requestAnimationFrame(animate);
     const delta = Math.min(clock.getDelta(), 0.1);
 
-    // 謎解き端末を回す
-    puzzles.forEach(p => {
-        if (!p.solved) p.mesh.rotation.y += delta * 1.5;
-    });
-
-    vanishItems.forEach(item => { if (item.active) item.mesh.rotation.y += delta * 2; });
-    decoyPickups.forEach(item => { if (item.active) item.mesh.rotation.y += delta * 2; });
+    puzzles.forEach(p => { if (!p.solved) p.mesh.rotation.y += delta * 1.5; });
+    ticketItems.forEach(t => { if (t.active) t.mesh.rotation.y += delta * 2; });
 
     updatePlayer(delta);
     updateEnemies(delta);
