@@ -2,6 +2,24 @@ import * as THREE from "three";
 import { GLTFLoader } from "https://unpkg.com/three@0.161.0/examples/jsm/loaders/GLTFLoader.js";
 
 // ====================
+// ピンチズーム＆ダブルタップ拡大の防止処理
+// ====================
+document.addEventListener('touchmove', (e) => {
+    if (e.touches.length > 1) {
+        e.preventDefault(); // 2本指以上の操作（ピンチイン/アウト）を無効化
+    }
+}, { passive: false });
+
+let lastTouchEnd = 0;
+document.addEventListener('touchend', (e) => {
+    const now = (new Date()).getTime();
+    if (now - lastTouchEnd <= 300) {
+        e.preventDefault(); // ダブルタップによる拡大を無効化
+    }
+    lastTouchEnd = now;
+}, false);
+
+// ====================
 // 設定値
 // ====================
 const MOUSE_SENSITIVITY = 0.0025; 
@@ -38,6 +56,14 @@ let hintTickets = 0;
 let activeDecoy = null;
 let killItems = [];      
 
+// スマホタッチ操作用変数
+let touchMoveId = null;
+let touchLookId = null;
+let moveStartX = 0, moveStartY = 0;
+let touchMoveX = 0, touchMoveY = 0;
+let lastLookX = 0, lastLookY = 0;
+let isTouchDashActive = false; // トグル式ダッシュフラグ
+
 // 謎解き管理
 let puzzles = [];
 let solvedPuzzleCount = 0;
@@ -52,7 +78,7 @@ const ALL_PUZZLE_QUESTIONS = [
     { question: "【謎解き】\n『南を向いている人が右を向いた。今向いている方角は？』", options: ["東", "西", "北"], answer: 1, hint: "南を基準にして、時計回りに90度回るとどっち？" },
     { question: "【謎解き】\n『1年の中で31日がない月はいくつある？』", options: ["1個", "5個", "7個"], answer: 1, hint: "31日まである月は 1,3,5,7,8,10,12月（7つ）です。" },
     { question: "【謎解き】\n『2, 4, 8, 16, 32, ?』\n? に入る数字はどれ？", options: ["48", "64", "128"], answer: 1, hint: "前の数字を毎回2倍していこう。" },
-    { question: "【謎解き】\n『パンはパンでも食べられないパンは？』", options: ["食パン", "フライパン", "メロンパン"], answer: 1, hint: "料理の時に使う道具の名前だよ。" },
+    { question: "【謎解き】\n『パンはパンんでも食べられないパンは？』", options: ["食パン", "フライパン", "メロンパン"], answer: 1, hint: "料理の時に使う道具の名前だよ。" },
     { question: "【謎解き】\n『上を向いても下を向き、右を向いても左を向くものは？』", options: ["影", "鏡の中の自分", "時計の針"], answer: 1, hint: "自分と向き合ったとき、左右はどう映るかな？" },
     { question: "【謎解き】\n『1kmの鉄と、1kmの綿。重いのはどっち？』", options: ["鉄", "綿", "同じ"], answer: 2, hint: "重さではなく「長さ」の単位(km)で比べられているよ。" },
     { question: "【謎解き】\n『ある部屋にろうそくが10本点いている。風で2本消えた。最終的に残ったろうそくは何本？』", options: ["0本", "2本", "8本"], answer: 1, hint: "消えなかった8本は燃え尽きてなくなってしまいます。" },
@@ -78,6 +104,119 @@ const gameOverScreen = document.getElementById("game-over-screen");
 const clearScreen = document.getElementById("clear-screen");
 const gameMessage = document.getElementById("game-message");
 const touchUI = document.getElementById("touch-ui");
+
+// タッチUIコンテナの設定調整
+if (touchUI) {
+    touchUI.style.position = "absolute";
+    touchUI.style.top = "0";
+    touchUI.style.left = "0";
+    touchUI.style.width = "100%";
+    touchUI.style.height = "100%";
+    touchUI.style.pointerEvents = "none";
+    touchUI.style.zIndex = "20";
+    touchUI.innerHTML = "";
+}
+
+// 動的ジョイスティックUI生成
+const joystickBase = document.createElement("div");
+joystickBase.style.position = "absolute";
+joystickBase.style.width = "100px";
+joystickBase.style.height = "100px";
+joystickBase.style.borderRadius = "50%";
+joystickBase.style.backgroundColor = "rgba(255, 255, 255, 0.25)";
+joystickBase.style.border = "2px solid rgba(255, 255, 255, 0.6)";
+joystickBase.style.pointerEvents = "none";
+joystickBase.style.display = "none";
+joystickBase.style.zIndex = "30";
+
+const joystickStick = document.createElement("div");
+joystickStick.style.position = "absolute";
+joystickStick.style.width = "40px";
+joystickStick.style.height = "40px";
+joystickStick.style.borderRadius = "50%";
+joystickStick.style.backgroundColor = "rgba(255, 255, 255, 0.8)";
+joystickStick.style.top = "30px";
+joystickStick.style.left = "30px";
+joystickStick.style.pointerEvents = "none";
+
+joystickBase.appendChild(joystickStick);
+document.body.appendChild(joystickBase);
+
+// トグル式ダッシュボタン（サイズ最適化・文字切れ防止＆優先タップ判定）
+const touchDashBtn = document.createElement("button");
+touchDashBtn.style.position = "absolute";
+touchDashBtn.style.bottom = "20px";
+touchDashBtn.style.right = "20px";
+touchDashBtn.style.width = "22vw";
+touchDashBtn.style.height = "22vw";
+touchDashBtn.style.maxWidth = "85px";
+touchDashBtn.style.maxHeight = "85px";
+touchDashBtn.style.minWidth = "65px";
+touchDashBtn.style.minHeight = "65px";
+touchDashBtn.style.borderRadius = "50%";
+touchDashBtn.style.border = "3px solid #ffffff";
+touchDashBtn.style.fontWeight = "bold";
+touchDashBtn.style.fontSize = "11px";
+touchDashBtn.style.lineHeight = "1.2";
+touchDashBtn.style.padding = "2px";
+touchDashBtn.style.textAlign = "center";
+touchDashBtn.style.zIndex = "50";
+touchDashBtn.style.pointerEvents = "auto";
+touchDashBtn.style.userSelect = "none";
+touchDashBtn.style.webkitUserSelect = "none";
+touchDashBtn.style.touchAction = "manipulation";
+
+function updateDashButtonUI() {
+    if (isTouchDashActive) {
+        touchDashBtn.innerHTML = "🏃<br>ダッシュ<br><b>ON</b>";
+        touchDashBtn.style.backgroundColor = "rgba(255, 200, 0, 0.95)";
+        touchDashBtn.style.color = "#000000";
+    } else {
+        touchDashBtn.innerHTML = "🏃<br>ダッシュ<br><b>OFF</b>";
+        touchDashBtn.style.backgroundColor = "rgba(60, 60, 60, 0.85)";
+        touchDashBtn.style.color = "#ffffff";
+    }
+}
+updateDashButtonUI();
+
+function toggleTouchDash(e) {
+    if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+    }
+    isTouchDashActive = !isTouchDashActive;
+    updateDashButtonUI();
+}
+
+touchDashBtn.addEventListener("touchstart", (e) => {
+    toggleTouchDash(e);
+}, { passive: false });
+
+touchDashBtn.addEventListener("click", (e) => {
+    if (e.pointerType === "mouse") {
+        toggleTouchDash(e);
+    }
+});
+
+if (touchUI) touchUI.appendChild(touchDashBtn);
+
+// ポーズ（一時停止）ボタン
+const pauseTriggerBtn = document.createElement("button");
+pauseTriggerBtn.innerText = "⏸️ 一時停止";
+pauseTriggerBtn.style.position = "absolute";
+pauseTriggerBtn.style.top = "10px";
+pauseTriggerBtn.style.left = "220px";
+pauseTriggerBtn.style.padding = "6px 12px";
+pauseTriggerBtn.style.fontSize = "13px";
+pauseTriggerBtn.style.fontWeight = "bold";
+pauseTriggerBtn.style.color = "#fff";
+pauseTriggerBtn.style.backgroundColor = "rgba(50, 50, 50, 0.8)";
+pauseTriggerBtn.style.border = "1px solid #ffffff";
+pauseTriggerBtn.style.borderRadius = "6px";
+pauseTriggerBtn.style.cursor = "pointer";
+pauseTriggerBtn.style.zIndex = "40";
+pauseTriggerBtn.addEventListener("click", () => pauseGame());
+document.body.appendChild(pauseTriggerBtn);
 
 let hasKey = false;
 let messageTimer = null;
@@ -244,8 +383,8 @@ statusContainer.appendChild(ticketDisplay);
 document.body.appendChild(statusContainer);
 
 function updateStatusUI() {
-    decoyBtn.innerText = `🔔 デコイ(F): ${decoyStock}個`;
-    killBtn.innerText = `💥 敵消去(G): ${killStock}個`;
+    decoyBtn.innerText = `🔔 デコイ: ${decoyStock}個`;
+    killBtn.innerText = `💥 敵消去: ${killStock}個`;
     ticketDisplay.innerText = `📜 チケット: ${hintTickets}枚`;
 }
 decoyBtn.addEventListener("click", () => triggerDecoyAction());
@@ -525,6 +664,8 @@ function buildMaze() {
 
     wallMeshes = []; walls = []; lightMeshes = []; openTiles = []; lockers = []; puzzles = []; ticketItems = []; killItems = [];
     decoyStock = 3; killStock = 0; hintTickets = 0; solvedPuzzleCount = 0; hasKey = false;
+    isTouchDashActive = false;
+    updateDashButtonUI();
     updateStatusUI();
 
     maze = generateMazeData(MAZE_WIDTH, MAZE_HEIGHT);
@@ -540,12 +681,11 @@ function buildMaze() {
     const shuffled = [...openTiles].sort(() => Math.random() - 0.5);
     startPos.copy(shuffled[0].pos);
 
-    // 20個の謎問題からランダムに選出
+    // 謎選出
     const randomSelectedQuestions = [...ALL_PUZZLE_QUESTIONS]
         .sort(() => Math.random() - 0.5)
         .slice(0, PUZZLE_COUNT);
 
-    // 謎解き端末配置
     const puzzleGeo = new THREE.BoxGeometry(0.6, 1.2, 0.6);
     for (let i = 0; i < PUZZLE_COUNT; i++) {
         const tile = shuffled[i + 1];
@@ -584,7 +724,7 @@ function buildMaze() {
     scene.add(killMesh);
     killItems.push({ mesh: killMesh, pos: killTile.pos.clone(), active: true });
 
-    // 壁の構築
+    // 壁構築
     const wallGeo = new THREE.BoxGeometry(TILE, WALL_HEIGHT, TILE);
     const wallMat = new THREE.MeshBasicMaterial({ color: 0xa89f91 });
 
@@ -603,7 +743,7 @@ function buildMaze() {
         }
     }
 
-    // 外周の脱出扉
+    // 脱出扉配置
     const outerCandidates = [];
     openTiles.forEach(t => {
         if (t.z === 1 && maze[0][t.x] === "#") outerCandidates.push({ tile: t, dir: "NORTH" });
@@ -628,7 +768,7 @@ function buildMaze() {
         goalPos.copy(tile.pos);
     }
 
-    // 照明
+    // 照明配置
     const lightFixtureGeo = new THREE.BoxGeometry(1.2, 0.1, 0.3);
     const lightFixtureMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
 
@@ -806,6 +946,7 @@ function triggerKillAction() {
     }
 }
 
+// PC用キーボード入力
 window.addEventListener("keydown", (e) => { 
     const k = e.key.toLowerCase();
     keys[k] = true; 
@@ -834,6 +975,96 @@ document.addEventListener("mousemove", (e) => {
         pitch = Math.max(-maxPitch, Math.min(maxPitch, pitch));
 
         camera.rotation.set(pitch, yaw, 0, "YXZ");
+    }
+});
+
+// スマホ用タッチ操作イベント
+window.addEventListener("touchstart", (e) => {
+    if (inputMode !== "TOUCH" || gameState !== STATES.PLAYING) return;
+
+    for (let i = 0; i < e.changedTouches.length; i++) {
+        const touch = e.changedTouches[i];
+        
+        // 左半面: ジョイスティック移動
+        if (touch.clientX < window.innerWidth / 2 && touchMoveId === null) {
+            touchMoveId = touch.identifier;
+            moveStartX = touch.clientX;
+            moveStartY = touch.clientY;
+            touchMoveX = 0;
+            touchMoveY = 0;
+
+            joystickBase.style.left = `${moveStartX - 50}px`;
+            joystickBase.style.top = `${moveStartY - 50}px`;
+            joystickStick.style.transform = `translate(0px, 0px)`;
+            joystickBase.style.display = "block";
+        }
+        // 右半面: 視点操作 (ダッシュボタン領域を除外)
+        else if (touch.clientX >= window.innerWidth / 2 && touchLookId === null) {
+            const btnAreaSize = 100;
+            if (touch.clientX > window.innerWidth - btnAreaSize && touch.clientY > window.innerHeight - btnAreaSize) {
+                continue; // ボタン押下エリアの視点移動除外
+            }
+            touchLookId = touch.identifier;
+            lastLookX = touch.clientX;
+            lastLookY = touch.clientY;
+        }
+    }
+}, { passive: false });
+
+window.addEventListener("touchmove", (e) => {
+    if (inputMode !== "TOUCH" || gameState !== STATES.PLAYING) return;
+
+    for (let i = 0; i < e.changedTouches.length; i++) {
+        const touch = e.changedTouches[i];
+
+        if (touch.identifier === touchMoveId) {
+            const dx = touch.clientX - moveStartX;
+            const dy = touch.clientY - moveStartY;
+            const dist = Math.hypot(dx, dy);
+            const maxRadius = 40;
+
+            const clampedDist = Math.min(dist, maxRadius);
+            const angle = Math.atan2(dy, dx);
+
+            const stickX = Math.cos(angle) * clampedDist;
+            const stickY = Math.sin(angle) * clampedDist;
+            joystickStick.style.transform = `translate(${stickX}px, ${stickY}px)`;
+
+            if (dist > 0) {
+                touchMoveX = stickX / maxRadius;
+                touchMoveY = stickY / maxRadius;
+            }
+        }
+
+        if (touch.identifier === touchLookId) {
+            const dx = touch.clientX - lastLookX;
+            const dy = touch.clientY - lastLookY;
+
+            yaw -= dx * TOUCH_SENSITIVITY;
+            pitch -= dy * TOUCH_SENSITIVITY;
+
+            const maxPitch = Math.PI / 2 - 0.15;
+            pitch = Math.max(-maxPitch, Math.min(maxPitch, pitch));
+            camera.rotation.set(pitch, yaw, 0, "YXZ");
+
+            lastLookX = touch.clientX;
+            lastLookY = touch.clientY;
+        }
+    }
+}, { passive: false });
+
+window.addEventListener("touchend", (e) => {
+    for (let i = 0; i < e.changedTouches.length; i++) {
+        const touch = e.changedTouches[i];
+        if (touch.identifier === touchMoveId) {
+            touchMoveId = null;
+            touchMoveX = 0;
+            touchMoveY = 0;
+            joystickBase.style.display = "none";
+        }
+        if (touch.identifier === touchLookId) {
+            touchLookId = null;
+        }
     }
 });
 
@@ -929,7 +1160,6 @@ function resetGame() {
     setChaseEffect(false);
 }
 
-// ★ ゲーム開始関数（画面の完全非表示処理）
 function startGame(mode) {
     inputMode = mode || "PC";
     resetGame(); 
@@ -941,10 +1171,10 @@ function startGame(mode) {
     hideElement(clearScreen);
 
     if (inputMode === "PC") {
-        hideElement(touchUI);
+        if (touchUI) hideElement(touchUI);
         renderer.domElement.requestPointerLock();
     } else {
-        showElement(touchUI, "block");
+        if (touchUI) showElement(touchUI, "block");
     }
 }
 
@@ -973,7 +1203,6 @@ function triggerClear() {
     showElement(clearScreen, "flex"); 
 }
 
-// ★ イベントリスナー初期化（DOMContentLoadedと直接実行の両対応）
 function setupUIEvents() {
     const startBtn = document.getElementById("start-btn");
     if (startBtn) hideElement(startBtn);
@@ -1090,11 +1319,30 @@ function updatePlayer(delta) {
         setInteractText(null);
     }
 
-    const isMoving = keys["w"] || keys["s"] || keys["a"] || keys["d"];
-    let isDashing = keys["shift"] && isMoving && stamina > 0;
+    const isKeyMoving = keys["w"] || keys["s"] || keys["a"] || keys["d"];
+    const isTouchMoving = (touchMoveX !== 0 || touchMoveY !== 0);
+    const isMoving = isKeyMoving || isTouchMoving;
 
+    // ダッシュ判定（TOUCHモードはトグル、PCモードはShiftキー保持）
+    let isDashing = false;
+    if (inputMode === "TOUCH") {
+        if (isTouchDashActive && isMoving && stamina > 0) {
+            isDashing = true;
+        }
+    } else {
+        if (keys["shift"] && isMoving && stamina > 0) {
+            isDashing = true;
+        }
+    }
+
+    // スタミナの消費・回復処理
     if (isDashing) {
         stamina = Math.max(0, stamina - STAMINA_DRAIN * delta);
+        if (stamina <= 0 && inputMode === "TOUCH") {
+            isTouchDashActive = false;
+            updateDashButtonUI();
+            showMessage("スタミナ切れ！", 1000);
+        }
     } else {
         stamina = Math.min(MAX_STAMINA, stamina + STAMINA_RECOVER * delta);
     }
@@ -1107,10 +1355,35 @@ function updatePlayer(delta) {
     const moveStep = speed * delta;
     let dx = 0, dz = 0;
 
-    if (keys["w"]) { dx += forwardX * moveStep; dz += forwardZ * moveStep; }
-    if (keys["s"]) { dx -= forwardX * moveStep; dz -= forwardZ * moveStep; }
-    if (keys["a"]) { dx -= rightX * moveStep; dz -= rightZ * moveStep; }
-    if (keys["d"]) { dx += rightX * moveStep; dz += rightZ * moveStep; }
+    let kbX = 0, kbZ = 0;
+    if (keys["w"]) kbZ -= 1;
+    if (keys["s"]) kbZ += 1;
+    if (keys["a"]) kbX -= 1;
+    if (keys["d"]) kbX += 1;
+
+    const kbLen = Math.hypot(kbX, kbZ);
+    if (kbLen > 0) {
+        kbX /= kbLen;
+        kbZ /= kbLen;
+    }
+
+    let moveDirX = kbX;
+    let moveDirZ = kbZ;
+
+    if (inputMode === "TOUCH" && isTouchMoving) {
+        moveDirX = touchMoveX;
+        moveDirZ = touchMoveY;
+
+        const touchLen = Math.hypot(moveDirX, moveDirZ);
+        if (touchLen > 0) {
+            const normalizedFactor = Math.min(1.0, touchLen);
+            moveDirX = (moveDirX / touchLen) * normalizedFactor;
+            moveDirZ = (moveDirZ / touchLen) * normalizedFactor;
+        }
+    }
+
+    dx = (forwardX * (-moveDirZ) + rightX * moveDirX) * moveStep;
+    dz = (forwardZ * (-moveDirZ) + rightZ * moveDirX) * moveStep;
 
     if (!hitWall(camera.position.x + dx, camera.position.z)) camera.position.x += dx;
     if (!hitWall(camera.position.x, camera.position.z + dz)) camera.position.z += dz;
