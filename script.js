@@ -2,11 +2,15 @@ import * as THREE from "three";
 import { GLTFLoader } from "https://unpkg.com/three@0.161.0/examples/jsm/loaders/GLTFLoader.js";
 
 // ====================
-// ピンチズーム＆ダブルタップ拡大の防止処理
+// ピンチズーム＆ダブルタップ拡大の完全防止処理
 // ====================
+document.addEventListener('gesturestart', (e) => {
+    e.preventDefault();
+});
+
 document.addEventListener('touchmove', (e) => {
     if (e.touches.length > 1) {
-        e.preventDefault(); // 2本指以上の操作（ピンチイン/アウト）を無効化
+        e.preventDefault();
     }
 }, { passive: false });
 
@@ -14,7 +18,7 @@ let lastTouchEnd = 0;
 document.addEventListener('touchend', (e) => {
     const now = (new Date()).getTime();
     if (now - lastTouchEnd <= 300) {
-        e.preventDefault(); // ダブルタップによる拡大を無効化
+        e.preventDefault();
     }
     lastTouchEnd = now;
 }, false);
@@ -62,7 +66,7 @@ let touchLookId = null;
 let moveStartX = 0, moveStartY = 0;
 let touchMoveX = 0, touchMoveY = 0;
 let lastLookX = 0, lastLookY = 0;
-let isTouchDashActive = false; // トグル式ダッシュフラグ
+let isTouchDashActive = false;
 
 // 謎解き管理
 let puzzles = [];
@@ -105,7 +109,6 @@ const clearScreen = document.getElementById("clear-screen");
 const gameMessage = document.getElementById("game-message");
 const touchUI = document.getElementById("touch-ui");
 
-// タッチUIコンテナの設定調整
 if (touchUI) {
     touchUI.style.position = "absolute";
     touchUI.style.top = "0";
@@ -142,7 +145,7 @@ joystickStick.style.pointerEvents = "none";
 joystickBase.appendChild(joystickStick);
 document.body.appendChild(joystickBase);
 
-// トグル式ダッシュボタン（サイズ最適化・文字切れ防止＆優先タップ判定）
+// トグル式ダッシュボタン
 const touchDashBtn = document.createElement("button");
 touchDashBtn.style.position = "absolute";
 touchDashBtn.style.bottom = "20px";
@@ -200,7 +203,7 @@ touchDashBtn.addEventListener("click", (e) => {
 
 if (touchUI) touchUI.appendChild(touchDashBtn);
 
-// ポーズ（一時停止）ボタン
+// ポーズボタン（ゲーム画面左上）
 const pauseTriggerBtn = document.createElement("button");
 pauseTriggerBtn.innerText = "⏸️ 一時停止";
 pauseTriggerBtn.style.position = "absolute";
@@ -243,7 +246,9 @@ function showMessage(text, duration = 2000) {
     }, duration);
 }
 
-// ポーズ画面の設定
+// ====================
+// ポーズ画面（メニュー）構築
+// ====================
 if (!pauseMenu) {
     pauseMenu = document.createElement("div");
     pauseMenu.id = "pause-menu";
@@ -263,18 +268,56 @@ if (!pauseMenu) {
     const pauseTitle = document.createElement("h2");
     pauseTitle.innerText = "PAUSE";
     pauseTitle.style.color = "#ffffff";
-    pauseTitle.style.fontSize = "36px";
-    pauseTitle.style.marginBottom = "20px";
+    pauseTitle.style.fontSize = "32px";
+    pauseTitle.style.marginBottom = "24px";
 
+    const btnContainer = document.createElement("div");
+    btnContainer.style.display = "flex";
+    btnContainer.style.flexDirection = "column";
+    btnContainer.style.gap = "12px";
+    btnContainer.style.width = "80%";
+    btnContainer.style.maxWidth = "250px";
+
+    const applyBtnStyle = (btn) => {
+        btn.style.padding = "12px 20px";
+        btn.style.fontSize = "16px";
+        btn.style.fontWeight = "bold";
+        btn.style.color = "#fff";
+        btn.style.backgroundColor = "#222";
+        btn.style.border = "2px solid #00d2ff";
+        btn.style.borderRadius = "8px";
+        btn.style.cursor = "pointer";
+    };
+
+    // 1. ゲームを再開
     const resumeBtn = document.createElement("button");
-    resumeBtn.innerText = "ゲームを再開";
-    resumeBtn.style.padding = "12px 24px";
-    resumeBtn.style.fontSize = "18px";
-    resumeBtn.style.cursor = "pointer";
+    resumeBtn.innerText = "▶️ ゲームを再開";
+    applyBtnStyle(resumeBtn);
     resumeBtn.addEventListener("click", () => resumeGame());
 
+    // 2. 最初からやり直す
+    const retryBtn = document.createElement("button");
+    retryBtn.innerText = "🔄 最初からやり直す";
+    applyBtnStyle(retryBtn);
+    retryBtn.addEventListener("click", () => {
+        hideElement(pauseMenu);
+        startGame(inputMode);
+    });
+
+    // 3. タイトルに戻る
+    const titleBtn = document.createElement("button");
+    titleBtn.innerText = "🏠 タイトルに戻る";
+    applyBtnStyle(titleBtn);
+    titleBtn.addEventListener("click", () => {
+        showMainMenu();
+    });
+
+    btnContainer.appendChild(resumeBtn);
+    btnContainer.appendChild(retryBtn);
+    btnContainer.appendChild(titleBtn);
+
     pauseMenu.appendChild(pauseTitle);
-    pauseMenu.appendChild(resumeBtn);
+    pauseMenu.appendChild(btnContainer);
     document.body.appendChild(pauseMenu);
 }
 
@@ -911,7 +954,15 @@ function triggerDecoyAction() {
         scene.add(mesh);
 
         activeDecoy = { pos: mesh.position.clone(), timer: 6.0, mesh: mesh };
-        showMessage("🔔 デコイ設置！敵の視界判定を無効化中！", 2500);
+        showMessage("🔔 デコイ設置！敵を引き寄せる！", 2500);
+
+        const decoyGrid = worldToGrid(activeDecoy.pos);
+        for (const e of enemies) {
+            if (!e.mesh) continue;
+            const enemyGrid = worldToGrid(e.mesh.position);
+            const path = findPath(enemyGrid, decoyGrid);
+            setEnemyPath(e, path);
+        }
     }
 }
 
@@ -984,8 +1035,7 @@ window.addEventListener("touchstart", (e) => {
 
     for (let i = 0; i < e.changedTouches.length; i++) {
         const touch = e.changedTouches[i];
-        
-        // 左半面: ジョイスティック移動
+
         if (touch.clientX < window.innerWidth / 2 && touchMoveId === null) {
             touchMoveId = touch.identifier;
             moveStartX = touch.clientX;
@@ -998,11 +1048,10 @@ window.addEventListener("touchstart", (e) => {
             joystickStick.style.transform = `translate(0px, 0px)`;
             joystickBase.style.display = "block";
         }
-        // 右半面: 視点操作 (ダッシュボタン領域を除外)
         else if (touch.clientX >= window.innerWidth / 2 && touchLookId === null) {
             const btnAreaSize = 100;
             if (touch.clientX > window.innerWidth - btnAreaSize && touch.clientY > window.innerHeight - btnAreaSize) {
-                continue; // ボタン押下エリアの視点移動除外
+                continue;
             }
             touchLookId = touch.identifier;
             lastLookX = touch.clientX;
@@ -1124,7 +1173,7 @@ function initEnemies() {
     for (let i = 0; i < ENEMY_COUNT; i++) {
         const mesh = createEnemyMesh();
         const spawnTile = shuffled[i + 8] || openTiles[0];
-        
+
         mesh.position.set(spawnTile.pos.x, 0, spawnTile.pos.z);
         scene.add(mesh);
 
@@ -1203,29 +1252,38 @@ function triggerClear() {
     showElement(clearScreen, "flex"); 
 }
 
+// UIイベントの確実なバインド
 function setupUIEvents() {
-    const startBtn = document.getElementById("start-btn");
-    if (startBtn) hideElement(startBtn);
-
     const modePcBtn = document.getElementById("mode-pc-btn");
     const modeTouchBtn = document.getElementById("mode-touch-btn");
 
-    if (modePcBtn) modePcBtn.onclick = () => startGame("PC");
-    if (modeTouchBtn) modeTouchBtn.onclick = () => startGame("TOUCH");
+    if (modePcBtn) {
+        modePcBtn.onclick = (e) => {
+            if (e) e.preventDefault();
+            startGame("PC");
+        };
+    }
+    if (modeTouchBtn) {
+        modeTouchBtn.onclick = (e) => {
+            if (e) e.preventDefault();
+            startGame("TOUCH");
+        };
+    }
 
-    const retryButtons = document.querySelectorAll("#retry-btn, #clear-retry-btn, #restart-btn, .retry-button, .restart-button");
+    const retryButtons = document.querySelectorAll("#retry-btn, #clear-retry-btn");
     retryButtons.forEach(btn => {
-        btn.onclick = () => startGame(inputMode);
+        btn.onclick = (e) => {
+            if (e) e.preventDefault();
+            startGame(inputMode);
+        };
     });
 
-    const menuButtons = document.querySelectorAll("#menu-btn, #clear-menu-btn, #game-over-menu-btn, .menu-button");
+    const menuButtons = document.querySelectorAll("#clear-menu-btn, #game-over-menu-btn");
     menuButtons.forEach(btn => {
-        btn.onclick = () => showMainMenu();
-    });
-
-    const resumeButtons = document.querySelectorAll("#resume-btn, .resume-button");
-    resumeButtons.forEach(btn => {
-        btn.onclick = () => resumeGame();
+        btn.onclick = (e) => {
+            if (e) e.preventDefault();
+            showMainMenu();
+        };
     });
 }
 
@@ -1244,6 +1302,10 @@ function updateEnemies(delta) {
             scene.remove(activeDecoy.mesh);
             activeDecoy = null;
             showMessage("デコイの効果が切れた！");
+
+            for (const e of enemies) {
+                assignNewRandomPath(e);
+            }
         }
     }
 
@@ -1253,25 +1315,35 @@ function updateEnemies(delta) {
         if (!e.mesh) continue;
 
         const distToPlayer = Math.hypot(camera.position.x - e.mesh.position.x, camera.position.z - e.mesh.position.z);
-        if (!isHiding && distToPlayer < 1.3) { triggerGameOver(); return; }
+
+        if (!isHiding && !activeDecoy && distToPlayer < 1.3) { 
+            triggerGameOver(); 
+            return; 
+        }
 
         let speed = ENEMY_SPEED * 0.55;
+        let isChasingDirectly = false;
         let targetX = null, targetZ = null;
 
         if (activeDecoy) {
             speed = ENEMY_SPEED;
-            targetX = activeDecoy.pos.x;
-            targetZ = activeDecoy.pos.z;
+            if (!e.path || e.pathIndex >= e.path.length) {
+                const enemyGrid = worldToGrid(e.mesh.position);
+                const decoyGrid = worldToGrid(activeDecoy.pos);
+                const path = findPath(enemyGrid, decoyGrid);
+                setEnemyPath(e, path);
+            }
         } else if (canSeePlayer(e.mesh)) {
             speed = ENEMY_SPEED;
             targetX = camera.position.x;
             targetZ = camera.position.z;
+            isChasingDirectly = true;
             isAnyEnemyChasing = true;
         } else if (!e.path || e.pathIndex >= e.path.length) {
             assignNewRandomPath(e);
         }
 
-        if (targetX !== null && targetZ !== null) {
+        if (isChasingDirectly && targetX !== null && targetZ !== null) {
             const dirX = targetX - e.mesh.position.x;
             const dirZ = targetZ - e.mesh.position.z;
             const dist = Math.hypot(dirX, dirZ);
@@ -1323,7 +1395,6 @@ function updatePlayer(delta) {
     const isTouchMoving = (touchMoveX !== 0 || touchMoveY !== 0);
     const isMoving = isKeyMoving || isTouchMoving;
 
-    // ダッシュ判定（TOUCHモードはトグル、PCモードはShiftキー保持）
     let isDashing = false;
     if (inputMode === "TOUCH") {
         if (isTouchDashActive && isMoving && stamina > 0) {
@@ -1335,7 +1406,6 @@ function updatePlayer(delta) {
         }
     }
 
-    // スタミナの消費・回復処理
     if (isDashing) {
         stamina = Math.max(0, stamina - STAMINA_DRAIN * delta);
         if (stamina <= 0 && inputMode === "TOUCH") {
